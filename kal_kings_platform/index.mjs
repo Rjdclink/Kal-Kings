@@ -290,6 +290,13 @@ export default {
       'content-security-policy':"default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"}});
     if(request.method==='GET'&&path==='/health')return reply({ok:true,service:'Kal Kings',uiServed:true,storageProvider:'Neon',
       credentialsAvailable:requiredEnv(),liveExecutionEnabled:false,asOf:iso()});
+    if(request.method==='GET'&&path==='/api/public-state'){
+      const crypto=await memo('crypto',TTL.crypto,cryptoSpot).catch(()=>[]);
+      return reply({service:'Kal Kings',access:'PUBLIC_READ_ONLY',asOf:iso(),
+        balances:{kalshi:null,draftkings:null,polymarket:null},holdings:[],wagers:[],
+        kalshiStatus:'PRIVATE',polymarketStatus:'REFERENCE_ONLY',opportunities:[],
+        quotes:{kalshi:[],draftkings:[],polymarket:[]},providers:{},crypto});
+    }
     if(!path.startsWith('/api/'))return error(404,'Not found');
     if(!allowEnvToken(request))return error(401,'Invalid administrator token');
     if(request.method==='GET'&&path==='/api/session')return reply({authenticated:true,service:'Kal Kings'});
@@ -323,3 +330,4 @@ export default {
     }
   }
 };
+

@@ -51,3 +51,27 @@ test('Unreviewed quote set cannot produce fabricated profitable opportunities',(
  const d=[{id:'DK-1',updatedAt:new Date().toISOString(),outcomes:[{selection:'A',american:200}]}];
  assert.deepEqual(evaluatedMatches([],k,d,100),[]);
 });
+
+
+test('Public dashboard opens without login and never requests private state',async()=>{
+ const html=await (await app.fetch(new Request('https://example.test/'))).text();
+ assert.ok(!html.includes('id="loginCover"'));
+ assert.ok(!html.includes("sessionStorage.getItem('kalkings_admin')"));
+ assert.ok(html.includes("api('/api/public-state')"));
+ assert.ok(!html.includes("api('/api/state')"));
+});
+test('Public state omits financial records and does not call private providers',async()=>{
+ const original=globalThis.fetch;const calls=[];
+ globalThis.fetch=async url=>{calls.push(String(url));return Response.json({price:'100',time:new Date().toISOString()});};
+ try{
+  const r=await app.fetch(new Request('https://example.test/api/public-state'));
+  assert.equal(r.status,200);const body=await r.json();
+  assert.deepEqual(body.balances,{kalshi:null,draftkings:null,polymarket:null});
+  for(const key of ['holdings','wagers','opportunities'])assert.deepEqual(body[key],[]);
+  assert.equal(body.access,'PUBLIC_READ_ONLY');assert.equal(body.crypto.length,2);
+  assert.ok(calls.every(url=>url.startsWith('https://api.exchange.coinbase.com/products/')));
+  assert.equal((await app.fetch(new Request('https://example.test/api/state'))).status,401);
+  assert.equal((await app.fetch(new Request('https://example.test/api/dk/balance',{method:'POST',body:'{"amount":1}'}))).status,401);
+  assert.equal((await app.fetch(new Request('https://example.test/api/public-state',{method:'POST'}))).status,401);
+ }finally{globalThis.fetch=original;}
+});

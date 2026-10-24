@@ -1,17 +1,23 @@
 # Kal Kings · Neon trading intelligence dashboard
 
-Single Neon Node.js 24 Function, source in `kal_kings_platform/` (a separate integration lane; does not modify `research_engine/` or `trading_dashboard/`). A live dashboard is served at `/`, with `/health` and token-gated `/api/*` routes. GitHub Actions and Railway are not used.
+Single Neon Node.js 24 Function, source in `kal_kings_platform/` (a separate integration lane; does not modify `research_engine/` or `trading_dashboard/`). A live dashboard is served at `/`, with public `/health` and `/api/public-state` routes. All other API routes remain token-gated. GitHub Actions and Railway are not used.
+
+### Public access (deployment 4)
+
+Opening the deployed URL now loads the dashboard without a login overlay. The public view requests only `/api/public-state`, containing public crypto context and empty private financial fields. Account balances, holdings, records, settings changes and all private APIs remain protected. The admin secret is retained unchanged because it also protects encrypted settings. Public access does not expose private state or grant write permissions.
+
+Validation: nine Node tests passed; deployed HTML and public state were checked without authorization.
 
 ### Market connections
 
 - Kalshi: public sports event quotes (3-second server cache) and signed authenticated account/holdings reads (`KALSHI_API_KEY_ID`, `KALSHI_PRIVATE_KEY`, `KALSHI_ENVIRONMENT=production`). These variables belong in the **Neon Function runtime**, not the repo.
 - Polymarket US: public US markets (8-second server cache) and authenticated balance API readiness with `POLYMARKET_KEY_ID` and `POLYMARKET_SECRET_KEY` (Neon runtime). No Polymarket funds or orders are tracked.
-- DraftKings Sportsbook: The Odds API bookmaker `draftkings` odds data. Configure `ODDS_API_KEY` in Neon, or enter the key in Settings after login; it is AES-256-GCM encrypted in Neon database. Quotes refresh based on provider cadence / server cache of 60 seconds. The UI checks every three seconds; that does not mean upstream odds change every three seconds.
+- DraftKings Sportsbook: The Odds API bookmaker `draftkings` odds data. Configure `ODDS_API_KEY` in Neon, or use the protected settings API; it is AES-256-GCM encrypted in Neon database. Quotes refresh based on provider cadence / server cache of 60 seconds. The UI checks every three seconds; that does not mean upstream odds change every three seconds.
 - Crypto: Coinbase Exchange BTC/USD and ETH/USD spot reference prices, TradingView independent chart links. Neither is a direct TradingView API signal.
 
 ### Administration and persistence
 
-Set `KALKINGS_ADMIN_TOKEN` (32+ unpredictable characters) in the **Neon Function deployment environment**. API calls use it in `x-kal-kings-admin`; the browser stores it in sessionStorage only. Do not commit this value or exchange secrets to GitHub. Neon injects `DATABASE_URL`; the Function uses Neon's HTTPS SQL API. Tables are defined in `schema.sql` and created in the existing `Kal Kings` project.
+Set `KALKINGS_ADMIN_TOKEN` (32+ unpredictable characters) in the **Neon Function deployment environment**. API calls use it in `x-kal-kings-admin`; the public browser view does not request or store it. Authorized API clients must supply it for private routes. Do not commit this value or exchange secrets to GitHub. Neon injects `DATABASE_URL`; the Function uses Neon's HTTPS SQL API. Tables are defined in `schema.sql` and created in the existing `Kal Kings` project.
 
 DraftKings bankroll entries, accepted tickets, settlements, encrypted odds key and explicitly reviewed settlement mappings are stored in Neon. The view is empty until a real balance or bet is entered. There are no invented prices or profitable opportunities. Comparisons require a stored review of full market settlement rules; title similarity alone is insufficient. The board shows a maximum of 10 reviewed positive conditional opportunities, not 10 invented trades.
 
@@ -31,3 +37,4 @@ node --test test.mjs test_server.mjs
 ```
 
 Neon deployment expects a ZIP with `index.mjs`, `engine.mjs`, and `dashboard.html` at archive root, runtime `nodejs24`, function slug `kalkingsdashboard`.
+
