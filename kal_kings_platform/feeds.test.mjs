@@ -98,3 +98,18 @@ test('Kalshi public sports normalization retains bid and bid depth for historica
  assert.equal(quote.noBidDepth,8);
  assert.equal(quote.yesAsk,.47);
 });
+
+// Actual Kalshi V2 nested market payload exposes YES quote sizes only.
+// A NO ask consumes the YES bid, while a NO bid consumes the YES ask.
+test('Kalshi feed derives NO-side depth from YES-side sizes when no-side fields are omitted',()=>{
+ const pages=[{series:'KXNFLGAME',data:{events:[{title:'Steelers vs Colts',markets:[{
+  ticker:'KXNFLGAME-26TEST-PIT',status:'active',yes_ask_dollars:'0.6100',
+  no_ask_dollars:'0.4000',yes_bid_dollars:'0.6000',no_bid_dollars:'0.3900',
+  yes_ask_size_fp:'1745367.07',yes_bid_size_fp:'73526.40',volume_fp:'3000.00'
+ }]}]}}];
+ const [quote]=collectKalshiSports(pages,'2026-10-24T20:59:59Z');
+ assert.equal(quote.yesDepth,1745367.07);
+ assert.equal(quote.noDepth,73526.40);
+ assert.equal(quote.noBidDepth,1745367.07);
+ assert.equal(quote.yesBidDepth,73526.40);
+});
