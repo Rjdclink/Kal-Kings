@@ -13,6 +13,10 @@ import {parseTradingViewAlert,mergeCryptoAlerts,priceTrendFromCandles} from './t
 import {sharpFeedOdds} from './sharp.mjs';
 import {buildKalshiHedgePlan,kalshiV2Order} from './orders.mjs';
 import {buildTradeBoard,executionSummary,bankrollTradeStatus} from './trade_board.mjs';
+import {findKalshiSoloCandidates,summarizeSoloOrders} from './kalshi_solo.mjs';
+import {makeSoloRunner,isNeonSoloTrigger} from './solo_runner.mjs';
+import {makeKalshiLifecycle} from './kalshi_lifecycle.mjs';
+import {cashAvailableForReinvestment} from './kalshi_manager.mjs';
 
 const HTML=readFileSync(new URL('./dashboard.html',import.meta.url),'utf8');
 const KALSHI='https://external-api.kalshi.com';
@@ -218,6 +222,12 @@ async function savePair(data){
   return {id:rows[0].id};
 }
 async function getPairs(){return await sql('SELECT id,kalshi_ticker,dk_event_id,dk_selection,kalshi_side,reviewed_rule_digest,reviewed_at FROM kal_kings_pairs ORDER BY reviewed_at DESC LIMIT 100');}
+async function getSoloOrders(){
+ const rows=await sql('SELECT ticker,status,contracts,yes_price,no_price,net_profit_dollars,capital_reserved_dollars,yes_filled,no_filled,created_at,updated_at FROM kal_kings_solo_orders ORDER BY created_at DESC LIMIT 20');
+ return rows.map(x=>({ticker:x.ticker,status:x.status,count:Number(x.contracts),yesPrice:Number(x.yes_price),noPrice:Number(x.no_price),
+   projectedNet:Number(x.net_profit_dollars),capitalUsed:Number(x.capital_reserved_dollars),yesFilled:Number(x.yes_filled),noFilled:Number(x.no_filled),
+   createdAt:x.created_at,updatedAt:x.updated_at}));
+}
 async function getAutoOrders(){
  const rows=await sql("SELECT wager_id,kalshi_ticker,status,count,limit_price,filled_count,created_at,updated_at FROM kal_kings_auto_orders ORDER BY created_at DESC LIMIT 12");
  return rows.map(x=>({wagerId:x.wager_id,ticker:x.kalshi_ticker,status:x.status,count:Number(x.count),
@@ -227,8 +237,13 @@ async function freshKalshiMarket(ticker){
   const body=await external(`${KALSHI}/trade-api/v2/markets/${encodeURIComponent(ticker)}`);
   const m=body.market;
   if(!m||m.ticker!==ticker||!['active','open'].includes(m.status))return null;
-  return {id:m.ticker,yesAsk:m.yes_ask_dollars==null?Number(m.yes_ask)/100:Number(m.yes_ask_dollars),
-    yesDepth:Number(m.yes_ask_size_fp??m.yes_ask_size??0),observedAt:iso()};
+  return {id:m.ticker,event:m.title||m.ticker,
+    yesAsk:m.yes_ask_dollars==null?Number(m.yes_ask)/100:Number(m.yes_ask_dollars),
+    noAsk:m.no_ask_dollars==null?Number(m.no_ask)/100:Number(m.no_ask_dollars),
+    yesBid:m.yes_bid_dollars==null?Number(m.yes_bid)/100:Number(m.yes_bid_dollars),
+    yesBidDepth:Number(m.yes_bid_size_fp??m.yes_bid_size??0),
+    yesDepth:Number(m.yes_ask_size_fp??m.yes_ask_size??0),
+    noDepth:Number(m.no_ask_size_fp??m.no_ask_size??0),observedAt:iso()};
 }
 async function automaticallyHedgeAcceptedDraftKingsTicket(ticket){
  if(!ticket.pairId)return {status:'NOT_APPLICABLE',note:'Unlinked DraftKings ticket was recorded; no Kalshi order.'};
@@ -264,6 +279,41 @@ async function automaticallyHedgeAcceptedDraftKingsTicket(ticket){
   return {status:resultStatus,filledCount,requestedContracts:plan.count,
     note:resultStatus==='UNKNOWN'?'Order response uncertain; reconcile on Kalshi before further trading.':'Only exchange-confirmed fills count as executed.'};
  }catch{return {status:'UNAVAILABLE',note:'Execution or reconciliation could not be verified; no automatic retry.'};}
+}
+
+// Independent Kalshi-only engine. Does not read the DraftKings ledger or a
+// reviewed Kalshi/DraftKings cross-venue match. The Neon timer drives it 24/7.
+async function submitSoloOrder(order){
+ const path='/trade-api/v2/portfolio/events/orders';
+ const res=await fetch(KALSHI+path,{method:'POST',
+  headers:{...kalshiHeaders(path,'POST'),'content-type':'application/json'},
+  body:JSON.stringify(order),redirect:'error',signal:AbortSignal.timeout(9000)});
+ if(!res.ok)throw Error('Kalshi rejected independent order');
+ const payload=await res.json();
+ if(!payload||typeof payload.fill_count!=='string')throw Error('Unrecognized Kalshi execution receipt');
+ return payload;
+}
+async function fetchKalshiSettlements(){
+  const payload=await kalshiPrivate('/trade-api/v2/portfolio/settlements?limit=100');
+  return Array.isArray(payload?.settlements)?payload.settlements:[];
+}
+const monitorKalshiPortfolio=makeKalshiLifecycle({fetchAccount:getKalshiAccount,
+ fetchSettlements:fetchKalshiSettlements,fetchMarket:freshKalshiMarket,
+ sql,submit:submitSoloOrder,createId:randomUUID,now:Date.now});
+const runSolo=makeSoloRunner({fetchAccount:getKalshiAccount,fetchQuotes:publicKalshi,
+ fetchMarket:freshKalshiMarket,monitorPositions:monitorKalshiPortfolio,
+ sql,submit:submitSoloOrder,createId:randomUUID,now:Date.now});
+async function getPositionWatches(){
+ const rows=await sql(`SELECT ticker,position_side,status,entry_price::text AS entry_price,
+ high_bid::text AS high_bid,exit_fill_count::text AS exit_fill_count,updated_at
+ FROM kal_kings_position_watch ORDER BY updated_at DESC LIMIT 20`);
+ return rows.map(r=>({ticker:r.ticker,direction:r.position_side,status:r.status,
+  entryPrice:Number(r.entry_price),peakObservedBid:Number(r.high_bid),
+  exitedContracts:r.exit_fill_count==null?null:Number(r.exit_fill_count),updatedAt:r.updated_at}));
+}
+async function getBotSettlements(){
+ const rows=await sql('SELECT ticker,settled_at FROM kal_kings_bot_settlements ORDER BY settled_at DESC LIMIT 20');
+ return rows.map(r=>({ticker:r.ticker,settledAt:r.settled_at}));
 }
 
 async function setting(name){const rows=await sql('SELECT value FROM kal_kings_settings WHERE key=$1',[name]);return rows[0]?.value||null;}
@@ -376,12 +426,12 @@ async function diagnostics(){
   checkedAt:iso()};
 }
 async function state(){
-  const [kr,pr,dr,ar,br,wr,pairsr,cr,polyAuth,tvAlerts,tvTrends,tvReady,autoHistory]=await Promise.allSettled([
+  const [kr,pr,dr,ar,br,wr,pairsr,cr,polyAuth,tvAlerts,tvTrends,tvReady,autoHistory,soloHistory,watches,settledPositions]=await Promise.allSettled([
     memo('kalshi',TTL.kalshi,publicKalshi),
     memo('polymarket',TTL.polymarket,publicPolymarket),
     memo('draftkings',TTL.draftkings,currentDraftKingsOdds),
     memo('account',TTL.account,getKalshiAccount),getBankroll(),getWagers(),getPairs(),
-    memo('crypto',TTL.crypto,cryptoSpot),memo('polyaccount',TTL.polyaccount,polyAccountCheck),getTradingViewAlerts(),memo('trends',TTL.trends,cryptoTrends),tradingViewEnabled(),getAutoOrders()
+    memo('crypto',TTL.crypto,cryptoSpot),memo('polyaccount',TTL.polyaccount,polyAccountCheck),getTradingViewAlerts(),memo('trends',TTL.trends,cryptoTrends),tradingViewEnabled(),getAutoOrders(),getSoloOrders(),getPositionWatches(),getBotSettlements()
   ]);
   const value=(r,fallback)=>r.status==='fulfilled'?r.value:fallback;
   const k=value(kr,[]),p=value(pr,[]),d=value(dr,{events:[],issues:['Odds provider unavailable']});
@@ -397,6 +447,8 @@ async function state(){
   const tradeBoard=buildTradeBoard({opportunities,signals,priceGaps,favorites});
   const ordersHistory=value(autoHistory,[]);
   const tradeReadiness=bankrollTradeStatus({balance:account.balance,opportunities,riskPolicy:allocationPolicy});
+  const soloIdeas=account.balance==null?[]:findKalshiSoloCandidates(k,{balance:account.balance,now:Date.now()});
+  const soloOrders=value(soloHistory,[]);
   const alerts=value(tvAlerts,[]),trends=value(tvTrends,[]);
   const enrichedCrypto=mergeCryptoAlerts(value(cr,[]),alerts).map(row=>({...row,
     technical:trends.find(t=>t.symbol===row.symbol)||null}));
@@ -422,9 +474,17 @@ async function state(){
    quotes:{kalshi:k,polymarket:p,draftkings:d.events},
    opportunities,priceGaps,favorites,sportsSignals:signals,riskPolicy:allocationPolicy,wagers:value(wr,[]),
    automatedOrders:ordersHistory,automatedExecutionSummary:executionSummary(ordersHistory),
+   kalshiSolo:{strategy:'Independent same-market complementary YES/NO quotes',scheduler:'Neon one-minute trigger',
+    opportunities:soloIdeas,orders:soloOrders,summary:summarizeSoloOrders(soloOrders),
+    funded:account.balance!=null&&account.balance>0,autoWithoutDraftKings:true,
+    cashReadyForReinvestment:cashAvailableForReinvestment(account).available,
+    monitoredExits:value(watches,[]),settlements:value(settledPositions,[]),
+    exitMethod:'Verified bot-owned position / fresh bid / reduce-only fill-or-kill order',
+    entryMethod:'Current positive net edge, not a forecast of the exact future price peak',
+    note:'No DraftKings ticket is required. Both Kalshi legs must execute; one-sided fills remain exposed.'},
    tradeBoard,tradeReadiness,
    topSports:sportsTop,agent:activeAgent(),
-   trading:{funded:tradeReadiness.funded,tradeReady:tradeReadiness.tradeReady,automaticOrdersEnabled:true,mode:'KALSHI_HEDGE_AFTER_RECORDED_ACCEPTED_DRAFTKINGS_TICKET',draftKingsAutomaticOrdersEnabled:false,backgroundWorkerActive:false},
+   trading:{funded:tradeReadiness.funded,tradeReady:tradeReadiness.tradeReady,automaticOrdersEnabled:true,mode:'INDEPENDENT_KALSHI_SOLO_PLUS_SEPARATE_DRAFTKINGS_ARBITRAGE',draftKingsAutomaticOrdersEnabled:false,backgroundWorkerActive:true},
    notes:['Provider quote timestamps determine freshness, not page refresh frequency.',
     'Polymarket US is reference-only with no funded positions.',
     'Favorites shown as market-implied confidence, not verified positive-EV wagers.',
@@ -442,12 +502,23 @@ export default {
       'content-security-policy':"default-src 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; worker-src blob: 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co; img-src 'self' data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"}});
     if(request.method==='GET'&&path==='/health'){
       const health={ok:true,service:'Kal Kings',uiServed:true,storageProvider:'Neon',
-        credentialsAvailable:requiredEnv(),liveExecutionEnabled:false,asOf:iso()};
+        credentialsAvailable:requiredEnv(),liveExecutionEnabled:true,asOf:iso()};
       if(u.searchParams.get('probe')==='1'){
         try{health.probes=await memo('healthDiagnostics',20000,diagnostics);}
         catch{health.probes={error:'Diagnostic provider unavailable'};}
       }
       return reply(health);
+    }
+    if(path==='/cron/kalshi-solo'){
+      if(request.method!=='POST')return error(405,'Method not allowed');
+      let body;
+      try {if(Number(request.headers.get('content-length'))>4096)return error(413,'Payload too large');
+        const raw=await request.text();if(raw.length>4096)return error(413,'Payload too large');body=JSON.parse(raw);
+      }catch{return error(400,'Invalid trigger payload');}
+      if(!isNeonSoloTrigger({'x-neon-trigger-invocation-id':request.headers.get('x-neon-trigger-invocation-id')},body))
+        return error(403,'Not an authorized Neon schedule trigger');
+      try{return reply(await runSolo({invocationId:body.invocation_id,scheduledAt:body.data.scheduled_at}));}
+      catch{return error(503,'Kalshi automation unavailable');}
     }
     if(path==='/webhooks/tradingview'){
       if(request.method!=='POST')return error(405,'Method not allowed');
@@ -466,6 +537,7 @@ export default {
       if(request.method==='POST'&&path==='/api/tradingview/config')return reply(await setTradingViewSecret((await request.json()).passphrase));
       if(request.method==='GET'&&path==='/api/wagers')return reply({wagers:await getWagers()});
       if(request.method==='GET'&&path==='/api/automation/history')return reply({orders:await getAutoOrders()});
+      if(request.method==='GET'&&path==='/api/kalshi/solo')return reply({orders:await getSoloOrders(),watches:await getPositionWatches(),settlements:await getBotSettlements()});
       if(request.method==='GET'&&path==='/api/pairs')return reply({pairs:await getPairs()});
       if(request.method==='POST'&&path==='/api/dk/balance'){
         const body=await request.json();return reply(await updateBankroll(body.amount));
