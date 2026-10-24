@@ -8,6 +8,7 @@ from statistics import median
 import time
 from urllib.request import Request, urlopen
 from .core import D, decimal
+from .depth import fetch_book, quote_buy
 
 SYMBOLS = ('BTC', 'ETH')
 VENUES = ('coinbase', 'kraken', 'bitstamp')
@@ -103,7 +104,8 @@ def consensus(feeds, now, threshold=D('.001')):
 
 
 def bootstrap_profit(prices, capital=D('1000'), fee_rate=D('.006'),
-                     slippage_rate=D('.001'), hours=24, trials=5000, seed=20261024):
+                     slippage_rate=D('.001'), hours=24, trials=5000, seed=20261024,
+                     entry_slippage_rate=None):
     """Long-only spot round trip; contiguous six-hour return blocks.
 
     Rates are configurable assumptions, not verified exchange fee tiers.
@@ -114,7 +116,8 @@ def bootstrap_profit(prices, capital=D('1000'), fee_rate=D('.006'),
         raise ValueError('At least 72 positive finite closes required')
     if not capital.is_finite() or capital<=0:
         raise ValueError('Invalid capital')
-    if any(not x.is_finite() or not 0<=x<D('.1') for x in (fee_rate,slippage_rate)):
+    entry_rate=slippage_rate if entry_slippage_rate is None else entry_slippage_rate
+    if any(not x.is_finite() or not 0<=x<D('.1') for x in (fee_rate,slippage_rate,entry_rate)):
         raise ValueError('Invalid cost assumption')
     if type(hours) is not int or not 1<=hours<=168 or type(trials) is not int or not 100<=trials<=100000:
         raise ValueError('Invalid simulation dimensions')
@@ -122,6 +125,7 @@ def bootstrap_profit(prices, capital=D('1000'), fee_rate=D('.006'),
     rng=Random(seed)
     result=[]
     cost=float(fee_rate+slippage_rate)
+    entry_cost=float(fee_rate+entry_rate)
     for _ in range(trials):
         path=[]
         while len(path)<hours:
@@ -129,7 +133,7 @@ def bootstrap_profit(prices, capital=D('1000'), fee_rate=D('.006'),
             path.extend(returns[start:start+6])
         terminal=math.exp(sum(path[:hours]))
         # Capital includes entry fee/slippage, then exit costs on proceeds.
-        result.append(float(capital)*(terminal*(1-cost)/(1+cost)-1))
+        result.append(float(capital)*(terminal*(1-cost)/(1+entry_cost)-1))
     result.sort()
     money=lambda x:format(x,'.2f')
     tail=max(1,trials//20)
@@ -140,7 +144,8 @@ def bootstrap_profit(prices, capital=D('1000'), fee_rate=D('.006'),
             'p95_profit_dollars':money(result[int((trials-1)*.95)]),
             'mean_worst_5_percent_dollars':money(sum(result[:tail])/tail),
             'loss_fraction':sum(x<0 for x in result)/trials,
-            'fee_rate_each_side':str(fee_rate),'slippage_rate_each_side':str(slippage_rate),
+            'fee_rate_each_side':str(fee_rate),'exit_slippage_rate':str(slippage_rate),
+            'entry_slippage_rate':str(entry_rate),
             'assumptions':'Six-hour moving-block resampling of recent hourly median USD closes; historical regime persists. Cost rates are illustrative. Correlated exchange prices are not independent evidence. No order fills, shorting, funding, taxes, outages or venue-default model.'}
 
 
@@ -158,12 +163,35 @@ def scan(symbols=SYMBOLS, transport=public_json, now=None):
                 feeds[symbol][venue]=future.result()
             except Exception as exc:
                 errors[symbol][venue]=type(exc).__name__
+    books={s:[] for s in symbols}
+    book_errors={s:{} for s in symbols}
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        jobs={pool.submit(fetch_book,v,s,transport):(s,v) for s in symbols for v in VENUES}
+        for future in as_completed(jobs):
+            symbol,venue=jobs[future]
+            try:
+                book=future.result()
+                books[symbol].append(quote_buy(book,D('1000'),time.time()))
+            except Exception as exc:
+                book_errors[symbol][venue]=type(exc).__name__
     assets=[]
     for symbol in symbols:
         try:
             signal,prices=consensus(feeds[symbol],now)
             forecast=bootstrap_profit(prices)
-            assets.append({'symbol':symbol,'status':'OBSERVED','consensus':signal,'forecast':forecast,'source_errors':errors[symbol]})
+            depth_forecasts=[]
+            for book in books[symbol]:
+                try:
+                    adjusted=bootstrap_profit(prices,entry_slippage_rate=D(book['entry_cost_vs_mid_rate']))
+                    depth_forecasts.append({'venue':book['venue'],'forecast':adjusted,
+                                            'basis':'Observed entry VWAP versus mid; future exit slippage and fees remain assumptions. Snapshot is not an executable quote.'})
+                except ValueError:
+                    book_errors[symbol][book['venue']]='Entry cost outside supported simulation range'
+            assets.append({'symbol':symbol,'status':'OBSERVED','consensus':signal,'forecast':forecast,
+                           'source_errors':errors[symbol],'orderbooks':sorted(books[symbol],key=lambda b:b['venue']),
+                           'orderbook_errors':book_errors[symbol],
+                           'depth_adjusted_forecasts':depth_forecasts,
+                           'forecast_prices':[str(p) for p in prices]})
         except ValueError as exc:
             assets.append({'symbol':symbol,'status':'UNAVAILABLE','reason':str(exc),'source_errors':errors[symbol]})
     assets.sort(key=lambda a:float(a.get('forecast',{}).get('expected_profit_dollars','-inf')),reverse=True)

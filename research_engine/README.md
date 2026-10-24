@@ -23,6 +23,8 @@ The last command serves http://127.0.0.1:8765. Keep the process running and page
 * Crypto: public Coinbase Exchange, Kraken and Bitstamp candles; consistent USD pairs, completed hourly bars, synchronized endpoints and contiguous histories. Majority means observed 24-hour momentum among available exchanges. At least two exchanges and 72 common hours are required. It does not mean most traders expect a move.
 * Crypto Monte Carlo: six-hour moving-block bootstrap of median exchange prices; 24-hour hypothetical long-only spot P&L on $1,000, ranked across BTC/ETH. Includes illustrative per-side 0.6% fees and 0.1% slippage, configurable in the Python function. This is directional risk analysis, not an arbitrage strategy or calibrated price prediction. Falling-price observations do not enable short selling.
 * TradingView: optional official hosted chart widget with attribution, loaded on user click; no signup or API key in this application. It displays charts and is not an input feed for the engine. Third-party availability/restrictions still apply.
+* Exact crypto depth: public aggregated order books from the same three exchanges, decimal-string prices and quantities, spread, displayed notional depth and a $1,000 ask-side VWAP estimate. Slow, stale, crossed and insufficient-depth books are rejected. Venue-specific Monte Carlo variants replace illustrative entry slippage with observed VWAP-versus-mid cost; exit costs and fees remain assumptions. Hypothetical fractional quantities are not rounded to venue lot increments and are not order instructions.
+* Forecast-input chart: a separate native chart uses the exact hourly median-price series fed into the model. TradingView remains a separate visual reference. Charts cannot supply hidden depth or guarantee an order fill.
 * Journal: optional append-only SQLite simulation records containing inputs and outputs. Not a brokerage ledger, positions system, or production database. No database hosting was changed.
 
 ## Event input and plug-in interface
@@ -57,3 +59,5 @@ This lane owns only `research_engine/` and the coordination note under `docs/`. 
 5. Use an authenticated production application, durable worker and shared cache if deploying beyond localhost. Public API reachability and TradingView rendering must be checked on that host.
 
 No funded trading has been enabled. No profitable live opportunity has been verified. See RESEARCH.md for evidence and model boundaries.
+
+Order-book observations are checked against a five-second age limit when created; the dashboard is a 60-second research monitor, so cached observations will age beyond that limit. Timestamps are included and observations must be reacquired before any execution decision. Public depth does not establish account eligibility, trading status, balances or fill acceptance. These are separate integration responsibilities.

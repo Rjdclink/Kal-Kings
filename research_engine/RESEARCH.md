@@ -35,3 +35,9 @@ The event simulator uses a shared outage and price shock, plus conditional per-l
 [TradingView hosted widgets](https://www.tradingview.com/widget-docs/widgets/charts/advanced-chart/) provide an embeddable chart. This is separate from licensed charting libraries and from data APIs. Attribution is retained. The engine neither scrapes TradingView signals nor treats chart access as permission to extract data.
 
 Crypto exchange agreement is descriptive, not independent votes about the future. We use a median price series and resample six-hour return blocks to retain some short-range dependence. Historical drift, limited history and regime changes can dominate estimated profits. Fees/slippage are explicit illustrative inputs, not account-specific estimates. Live calibration, larger history and walk-forward tests remain unimplemented.
+
+## Exact price and depth observations
+
+[Coinbase product book](https://docs.cdp.coinbase.com/api-reference/exchange-api/rest-api/products/get-product-book), [Kraken L2 book](https://docs.kraken.com/api-reference/market-data/get-order-book) and the Bitstamp public API expose machine-readable levels. The depth module uses these endpoints instead of estimating prices from image pixels. It calculates a hypothetical ask-side sweep, preserving decimal prices and quantities. These snapshots do not guarantee liquidity remains available. Account permissions, exchange status, lot sizes, latency, fees and order acceptance require separate validation.
+
+Observed entry cost can be propagated into a conditional forecast without claiming that it predicts future liquidity. Each venue variant uses VWAP relative to mid as its entry-slippage input, while future exit slippage remains an assumption. No cross-exchange arbitrage trade or automatic execution is inferred from these snapshots.
