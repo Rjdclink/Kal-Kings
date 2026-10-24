@@ -1,12 +1,13 @@
 # Kal Kings research engine
 
-Python 3.11+, standard library only. Non-sports financial event-contract analysis and public crypto research. No trading credentials, real-money order placement, sportsbook adapters, GitHub Actions, or hosting dependencies.
+Python 3.11+. Analysis and public feeds use the standard library; optional authenticated readiness checks require `requirements-auth.txt`. Non-sports financial event-contract analysis and public crypto research. No embedded credentials, real-money order placement, sportsbook adapters, GitHub Actions, or hosting dependencies.
 
 ## Run
 
 From this directory:
 
 ```sh
+python -m pip install -r requirements-auth.txt
 python -m unittest discover -s tests -v
 python -m kalresearch --demo
 python -m kalresearch --demo --rank
@@ -61,3 +62,15 @@ This lane owns only `research_engine/` and the coordination note under `docs/`. 
 No funded trading has been enabled. No profitable live opportunity has been verified. See RESEARCH.md for evidence and model boundaries.
 
 Order-book observations are checked against a five-second age limit when created; the dashboard is a 60-second research monitor, so cached observations will age beyond that limit. Timestamps are included and observations must be reacquired before any execution decision. Public depth does not establish account eligibility, trading status, balances or fill acceptance. These are separate integration responsibilities.
+
+## Authenticated Kalshi connection check
+
+Configure `KALSHI_API_KEY_ID` and `KALSHI_PRIVATE_KEY_PATH` in the runtime environment; the latter points to a locally mounted PEM private key. Do not commit credentials. Both documented RSA-PSS/SHA-256 and Ed25519 signing are supported. Then run:
+
+```sh
+python -m kalresearch.connection --environment production
+```
+
+This checks exchange status and authenticated balance access without displaying balances or credentials. It does not place orders or activate a trading worker. Demo is the default environment; demo and production credentials are different. Requests cannot redirect to other hosts.
+
+At inspection on 2026-10-24, `main` and `feat/kalshi-neon-live` did not contain the claimed credential/integration files. Runtime credentials were also unavailable. Consequently live authentication remains unverified. The other integration lane must provide the configured credential location and execution implementation before full integration can be completed.
