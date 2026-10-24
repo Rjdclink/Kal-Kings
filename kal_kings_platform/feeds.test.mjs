@@ -86,3 +86,15 @@ test('three-way quote discovery includes DraftKings vs Polymarket when exact tea
  assert.equal(out[0].marketB,'Polymarket US');
  assert.equal(out[0].profitable,false);
 });
+test('Kalshi public sports normalization retains bid and bid depth for historical calibration',()=>{
+ const pages=[{series:'KXNFLGAME',data:{events:[{title:'Test game',markets:[{
+  ticker:'KXNFLGAME-2026-TEST',status:'active',yes_bid_dollars:'0.4300',yes_ask_dollars:'0.4700',
+  no_bid_dollars:'0.5300',no_ask_dollars:'0.5700',yes_bid_size_fp:'12.00',
+  no_bid_size_fp:'8.00',yes_ask_size_fp:'5.00',no_ask_size_fp:'9.00'}]}]}}];
+ const [quote]=collectKalshiSports(pages,'2026-10-24T20:30:00Z');
+ assert.equal(quote.yesBid,.43);
+ assert.equal(quote.noBid,.53);
+ assert.equal(quote.yesBidDepth,12);
+ assert.equal(quote.noBidDepth,8);
+ assert.equal(quote.yesAsk,.47);
+});
