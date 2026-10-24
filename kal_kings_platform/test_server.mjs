@@ -62,14 +62,21 @@ test('Public dashboard opens without login and never requests private state',asy
 });
 test('Public state omits financial records and does not call private providers',async()=>{
  const original=globalThis.fetch;const calls=[];
- globalThis.fetch=async url=>{calls.push(String(url));return Response.json({price:'100',time:new Date().toISOString()});};
+ globalThis.fetch=async url=>{
+  calls.push(String(url));
+  if(String(url).includes('/events?'))return Response.json({events:[{category:'Sports',title:'Fixture event',markets:[{ticker:'TEST',yes_ask_dollars:'0.5'}]}]});
+  if(String(url).includes('/v1/markets?'))return Response.json({markets:[{slug:'fixture',category:'Sports',bestAskQuote:{value:'.4'}}]});
+  return Response.json({price:'100',time:new Date().toISOString()});
+ };
  try{
   const r=await app.fetch(new Request('https://example.test/api/public-state'));
   assert.equal(r.status,200);const body=await r.json();
   assert.deepEqual(body.balances,{kalshi:null,draftkings:null,polymarket:null});
   for(const key of ['holdings','wagers','opportunities'])assert.deepEqual(body[key],[]);
   assert.equal(body.access,'PUBLIC_READ_ONLY');assert.equal(body.crypto.length,2);
-  assert.ok(calls.every(url=>url.startsWith('https://api.exchange.coinbase.com/products/')));
+  assert.equal(body.quotes.kalshi.length,1);assert.equal(body.quotes.polymarket.length,1);
+  assert.ok(calls.every(url=>!url.includes('/portfolio/')&&!url.includes('/account/')));
+  assert.deepEqual(body.providers.draftkings.issues,['Odds API key not configured']);
   assert.equal((await app.fetch(new Request('https://example.test/api/state'))).status,401);
   assert.equal((await app.fetch(new Request('https://example.test/api/dk/balance',{method:'POST',body:'{"amount":1}'}))).status,401);
   assert.equal((await app.fetch(new Request('https://example.test/api/public-state',{method:'POST'}))).status,401);

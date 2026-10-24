@@ -2,11 +2,11 @@
 
 Single Neon Node.js 24 Function, source in `kal_kings_platform/` (a separate integration lane; does not modify `research_engine/` or `trading_dashboard/`). A live dashboard is served at `/`, with public `/health` and `/api/public-state` routes. All other API routes remain token-gated. GitHub Actions and Railway are not used.
 
-### Public access (deployment 4)
+### Public access (deployment 5)
 
-Opening the deployed URL now loads the dashboard without a login overlay. The public view requests only `/api/public-state`, containing public crypto context and empty private financial fields. Account balances, holdings, records, settings changes and all private APIs remain protected. The admin secret is retained unchanged because it also protects encrypted settings. Public access does not expose private state or grant write permissions.
+Opening the deployed URL now loads the dashboard without a login overlay. The public view requests only `/api/public-state`, containing read-only Kalshi, Polymarket US, DraftKings-provider feeds and crypto context, with empty private financial fields. Feed failures are isolated; unavailable providers display their reason. No matching, ranking or simulation runs in the public endpoint. Account balances, holdings, records, settings changes and all private APIs remain protected. The admin secret is retained unchanged because it also protects encrypted settings. Public access does not expose private state or grant write permissions.
 
-Validation: nine Node tests passed; deployed HTML and public state were checked without authorization.
+Validation: nine Node tests passed; the deployed public endpoint returned HTTP 200 without authorization, with 200 Kalshi quotes, 86 Polymarket US quotes and two crypto prices. DraftKings returned no quotes because the odds-provider key was not configured. This status is displayed rather than represented as a working feed.
 
 ### Market connections
 

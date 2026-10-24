@@ -291,11 +291,22 @@ export default {
     if(request.method==='GET'&&path==='/health')return reply({ok:true,service:'Kal Kings',uiServed:true,storageProvider:'Neon',
       credentialsAvailable:requiredEnv(),liveExecutionEnabled:false,asOf:iso()});
     if(request.method==='GET'&&path==='/api/public-state'){
-      const crypto=await memo('crypto',TTL.crypto,cryptoSpot).catch(()=>[]);
+      const [kr,pr,dr,cr]=await Promise.allSettled([
+        memo('kalshi',TTL.kalshi,publicKalshi),
+        memo('polymarket',TTL.polymarket,publicPolymarket),
+        getOddsKey().then(key=>key?memo('draftkings',TTL.draftkings,()=>draftKingsOdds(key)):{events:[],issues:['Odds API key not configured']}),
+        memo('crypto',TTL.crypto,cryptoSpot)
+      ]);
+      const value=(r,fallback)=>r.status==='fulfilled'?r.value:fallback;
+      const k=value(kr,[]),p=value(pr,[]),d=value(dr,{events:[],issues:['Odds provider unavailable']}),crypto=value(cr,[]);
+      const status=(result,key,count,issues=[])=>({count,ready:result.status==='fulfilled'&&count>0,
+        lastFetch:cachedStatus(key).lastFetch,error:result.status==='rejected'?'Provider unavailable':null,issues});
       return reply({service:'Kal Kings',access:'PUBLIC_READ_ONLY',asOf:iso(),
         balances:{kalshi:null,draftkings:null,polymarket:null},holdings:[],wagers:[],
         kalshiStatus:'PRIVATE',polymarketStatus:'REFERENCE_ONLY',opportunities:[],
-        quotes:{kalshi:[],draftkings:[],polymarket:[]},providers:{},crypto});
+        quotes:{kalshi:k,draftkings:d.events,polymarket:p},providers:{
+          kalshi:status(kr,'kalshi',k.length),polymarket:status(pr,'polymarket',p.length),
+          draftkings:status(dr,'draftkings',d.events.length,d.issues||[])},crypto});
     }
     if(!path.startsWith('/api/'))return error(404,'Not found');
     if(!allowEnvToken(request))return error(401,'Invalid administrator token');
