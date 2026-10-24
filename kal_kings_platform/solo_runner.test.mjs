@@ -52,3 +52,10 @@ test('an unreconciled position blocks new entries even when quote edge is positi
  const f=fixture({monitorPositions:async()=>({status:'MONITORED',freeCash:100,pendingReview:1})});
  const out=await f.run(runInput);assert.equal(out.status,'HALTED_PENDING_RECONCILIATION');assert.equal(f.calls.length,0);
 });
+
+test('worker records failure stage rather than pretending market has no opportunities',async()=>{
+ const f=fixture({monitorPositions:async()=>{throw Error('secret internal detail')}});
+ const result=await f.run(runInput);
+ assert.equal(result.status,'SCANNER_UNAVAILABLE_MONITOR');
+ assert.ok(!JSON.stringify(result).includes('secret internal detail'));
+});

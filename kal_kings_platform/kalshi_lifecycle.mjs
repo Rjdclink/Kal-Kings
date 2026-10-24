@@ -11,10 +11,12 @@ export function makeKalshiLifecycle({fetchAccount,fetchSettlements,fetchMarket,s
   const cash=cashAvailableForReinvestment(account);
   if(cash.status==='UNAVAILABLE')return {status:'ACCOUNT_UNAVAILABLE',freeCash:0,confirmedSettlements:0,exitsSubmitted:0,exitReceiptsConfirmed:0};
   const tracked=await sql("SELECT ticker,status,yes_filled::text AS yes_filled,no_filled::text AS no_filled,yes_price::text AS yes_price,no_price::text AS no_price FROM kal_kings_solo_orders WHERE status IN ('HEDGED','UNHEDGED','YES_FILLED','PARTIALLY_FILLED','UNCERTAIN','SUBMITTING') ORDER BY updated_at DESC LIMIT 100");
-  const allSettlements=await fetchSettlements();
+  let allSettlements=[],settlementFeed='VERIFIED';
+  try{allSettlements=await fetchSettlements();}
+  catch{settlementFeed='UNAVAILABLE';}
   const settled=Array.isArray(allSettlements)?allSettlements:[];
   const holdings=new Map((Array.isArray(account.holdings)?account.holdings:[]).map(p=>[p.ticker,p]));
-  const result={status:'MONITORED',freeCash:cash.available,trackedPositions:tracked.length,confirmedSettlements:0,
+  const result={status:'MONITORED',settlementFeed,freeCash:cash.available,trackedPositions:tracked.length,confirmedSettlements:0,
     exitsSubmitted:0,exitReceiptsConfirmed:0,pendingReview:0};
   for(const trade of tracked){
     const proof=settlementEvidence(settled,trade.ticker);

@@ -26,29 +26,35 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
       await sql('UPDATE kal_kings_solo_runs SET result=$2,finished_at=now() WHERE invocation_id=$1',[invocationId,result.status]);
       return result;
     };
+    let stage='MONITOR';
     try{
       // Reconcile bot positions and inspect exchange-held cash before seeking new
       // entries. Settlement notices are NOT manually credited to bankroll.
       const monitored=await monitorPositions();
       if(Number(monitored?.pendingReview)>0)return finish({status:'HALTED_PENDING_RECONCILIATION'});
+      stage='EXPOSURES';
       const exposures=await sql(`SELECT o.ticker FROM kal_kings_solo_orders o
         LEFT JOIN kal_kings_position_watch w ON o.ticker=w.ticker
         WHERE o.status IN ('UNHEDGED','UNCERTAIN','PARTIALLY_FILLED','YES_FILLED','SUBMITTING')
           AND (w.status IS NULL OR w.status<>'CLOSED') LIMIT 1`);
       if(exposures.length)return finish({status:'HALTED_PENDING_RECONCILIATION'});
+      stage='ACCOUNT';
       const account=await fetchAccount();
       const available=Number(monitored?.freeCash);
       const balance=Number.isFinite(available)?Math.min(Number(account?.balance),available):Number(account?.balance);
       if(!Number.isFinite(balance)||balance<=0)return finish({status:'UNFUNDED'});
+      stage='QUOTES';
       const candidates=findKalshiSoloCandidates(await fetchQuotes(),{balance,now:now()});
       if(!candidates.length)return finish({status:'NO_QUALIFYING_KALSHI_TRADE'});
       for(const idea of candidates){
         // Requery the exact market immediately before submitting. The scanner
         // does not treat a 3-second UI refresh as proof of execution freshness.
+        stage='REQUOTE';
         const exact=await fetchMarket(idea.marketTicker);
         const refreshed=findKalshiSoloCandidates([exact],{balance,now:now()})[0];
         if(!refreshed)continue;
         const firstId=createId(),secondId=createId();
+        stage='RESERVATION';
         const created=await sql(`INSERT INTO kal_kings_solo_orders(ticker,status,yes_client_order_id,no_client_order_id,contracts,yes_price,no_price,net_profit_dollars,capital_reserved_dollars,created_at)
           VALUES($1,'SUBMITTING',$2::uuid,$3::uuid,$4,$5,$6,$7,$8,now()) ON CONFLICT(ticker) DO NOTHING RETURNING ticker`,
           [refreshed.marketTicker,firstId,secondId,String(refreshed.count),String(refreshed.yesPrice),String(refreshed.noPrice),String(refreshed.netProfitDollars),String(refreshed.requiredDollars)]);
@@ -79,7 +85,7 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
       }
       return finish({status:'NO_NEW_KALSHI_MARKET_ELIGIBLE'});
     }catch{
-      return finish({status:'SCANNER_UNAVAILABLE'});
+      return finish({status:`SCANNER_UNAVAILABLE_${stage}`});
     }
   };
 }
