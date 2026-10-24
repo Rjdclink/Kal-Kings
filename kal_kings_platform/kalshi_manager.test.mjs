@@ -35,7 +35,7 @@ test('no exits against stale or illiquid bids',()=>{
 test('sell YES uses opposite book side with reduce only and no reversal',()=>{
  const order=buildReductionOrder({ticker:'KXTEST-ONE',direction:'yes',quantity:1,bidPrice:.5,clientOrderId:'123e4567-e89b-42d3-a456-426614174000'});
  assert.equal(order.side,'ask');assert.equal(order.price,'0.5000');assert.equal(order.reduce_only,true);
- assert.equal(order.time_in_force,'fill_or_kill');
+ assert.equal(order.time_in_force,'immediate_or_cancel');
 });
 test('sell NO uses opposite book side with correctly inverted yes-scale price',()=>{
  const order=buildReductionOrder({ticker:'KXTEST-ONE',direction:'no',quantity:1,bidPrice:.35,clientOrderId:'123e4567-e89b-42d3-a456-426614174000'});

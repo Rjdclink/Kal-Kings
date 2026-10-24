@@ -48,7 +48,7 @@ export function buildReductionOrder({ticker,direction,quantity,bidPrice,clientOr
  // V2 book side yes=bid, no=ask (opposite exposure), with YES-scale price.
  return {ticker,client_order_id:clientOrderId,side:direction==='yes'?'ask':'bid',
   count:quantity.toFixed(2),price:(direction==='yes'?bidPrice:1-bidPrice).toFixed(4),
-  reduce_only:true,time_in_force:'fill_or_kill',self_trade_prevention_type:'taker_at_cross',cancel_order_on_pause:true};
+  reduce_only:true,time_in_force:'immediate_or_cancel',self_trade_prevention_type:'taker_at_cross',cancel_order_on_pause:true};
 }
 export function evaluateEntryTiming({candidate,sourceAgeMs,verifiedSettlement,freeCash}={}){
  if(!verifiedSettlement)return {action:'WAIT',reason:'UNVERIFIED_RULES'};
