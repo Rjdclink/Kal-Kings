@@ -39,9 +39,13 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
           AND (w.status IS NULL OR w.status<>'CLOSED') LIMIT 1`);
       if(exposures.length)return finish({status:'HALTED_PENDING_RECONCILIATION'});
       stage='ACCOUNT';
-      const account=await fetchAccount();
-      const available=Number(monitored?.freeCash);
-      const balance=Number.isFinite(available)?Math.min(Number(account?.balance),available):Number(account?.balance);
+      if(monitored?.status==='ACCOUNT_UNAVAILABLE')return finish({status:'ACCOUNT_UNAVAILABLE'});
+      const verifiedCash=Number(monitored?.freeCash);
+      // Lifecycle already performed a signed balance read. Reuse that verified
+      // balance rather than issuing a second request every minute, which can
+      // trigger provider rate limits and leave the worker unable to scan.
+      const hasMonitoredCash=monitored?.status==='MONITORED' && Number.isFinite(verifiedCash) && verifiedCash>=0;
+      const balance=hasMonitoredCash?verifiedCash:Number((await fetchAccount())?.balance);
       if(!Number.isFinite(balance)||balance<=0)return finish({status:'UNFUNDED'});
       stage='QUOTES';
       const candidates=findKalshiSoloCandidates(await fetchQuotes(),{balance,now:now()});
