@@ -22,3 +22,9 @@ test('sampler refuses malformed or future prices and never invents quote data',(
  const selected=selectHistorySamples(rows,now,10);
  assert.deepEqual(selected.map(x=>x.id),[valid(1).id]);
 });
+test('historical quotes do not require no-side depth when the YES bid and ask are verifiable',()=>{
+ const q={...valid(42),noDepth:null,yesDepth:null,yesBidDepth:null};
+ const sample=selectHistorySamples([q],now,12);
+ assert.equal(sample.length,1);
+ assert.equal(sample[0].id,q.id);
+});
