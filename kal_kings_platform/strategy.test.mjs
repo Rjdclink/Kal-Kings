@@ -2,12 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {riskPolicy, recommendedDirectional, simulateDirectional, impliedTwoWay, chooseHedge} from './strategy.mjs';
 
-test('bankroll adaptive risk rises with account size but caps dollar tail exposure',()=>{
+test('bankroll adaptive percentage rises with account size without a fixed dollar ceiling',()=>{
   const tiny=riskPolicy(25),large=riskPolicy(2500),big=riskPolicy(100000);
   assert.ok(tiny.riskPercent<large.riskPercent);
   assert.ok(large.riskPercent<=big.riskPercent);
   assert.ok(tiny.tailLimitDollars<1);
-  assert.ok(big.tailLimitDollars<=25);
+  assert.ok(big.tailLimitDollars>25);
   assert.ok(big.riskPercent<=3);
   assert.throws(()=>riskPolicy(-1));
 });
@@ -23,10 +23,12 @@ test('profitable 98% favorite receives more stake than a less confident alternat
   assert.ok(a.stakeDollars>b.stakeDollars);
   assert.ok(a.maximumLossDollars<=a.policy.hardLossLimitDollars+0.001);
 });
-test('small bankroll cannot place a position that exceeds its risk budget',()=>{
+test('minimum-lot exception may exceed tiny percentage but never spends beyond available bankroll',()=>{
   const a=recommendedDirectional({bankroll:25,price:.9,probability:.99,depth:1000,sourceAgeMs:1000});
-  assert.equal(a.accepted,false);
-  assert.equal(a.reason,'INSUFFICIENT_RISK_BUDGET');
+  assert.equal(a.accepted,true);
+  assert.equal(a.contracts,1);
+  assert.equal(a.minimumTradeExceptionApplied,true);
+  assert.ok(a.stakeDollars<=25);
 });
 test('stale or unavailable depth prevents an actionable recommendation',()=>{
   assert.equal(recommendedDirectional({bankroll:1000,price:.8,probability:.97,depth:100,sourceAgeMs:121000}).reason,'STALE_QUOTE');
@@ -58,4 +60,27 @@ test('DraftKings hedge recommends actual two-way payout-equalized stake within s
   assert.ok(h.dkStakeDollars<=1000);
   assert.ok(h.minimumNetProfit>0);
   assert.ok(h.kalshiCostDollars<=1000);
+});
+
+test('variable risk rate scales with bankroll without a fixed $25 dollar ceiling',()=>{
+ const tiny=riskPolicy(.05),large=riskPolicy(2500),huge=riskPolicy(100000);
+ assert.equal(tiny.riskPercent,.75);
+ assert.ok(tiny.hardLossLimitDollars>0);
+ assert.ok(large.hardLossLimitDollars>25);
+ assert.ok(huge.hardLossLimitDollars>large.hardLossLimitDollars);
+ assert.ok(huge.hardLossLimitDollars<=100000);
+});
+
+test('a verified positive-edge trade can use a single affordable contract despite subcent percent budget',()=>{
+ const r=recommendedDirectional({bankroll:.05,price:.02,probability:.75,depth:50,sourceAgeMs:200,feePerContract:.01});
+ assert.equal(r.accepted,true);
+ assert.equal(r.contracts,1);
+ assert.ok(r.maximumLossDollars<=.05);
+ assert.equal(r.minimumTradeExceptionApplied,true);
+});
+
+test('minimum trade allowance never borrows funds or pays for a poor or stale trade',()=>{
+ assert.equal(recommendedDirectional({bankroll:.02,price:.03,probability:.95,depth:30,sourceAgeMs:200,feePerContract:.01}).accepted,false);
+ assert.equal(recommendedDirectional({bankroll:.05,price:.04,probability:.045,depth:30,sourceAgeMs:200,feePerContract:.01}).accepted,false);
+ assert.equal(recommendedDirectional({bankroll:.05,price:.02,probability:.75,depth:30,sourceAgeMs:95000,feePerContract:.01}).accepted,false);
 });
