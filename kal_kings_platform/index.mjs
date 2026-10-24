@@ -294,7 +294,7 @@ export default {
       const [kr,pr,dr,cr]=await Promise.allSettled([
         memo('kalshi',TTL.kalshi,publicKalshi),
         memo('polymarket',TTL.polymarket,publicPolymarket),
-        getOddsKey().then(key=>key?memo('draftkings',TTL.draftkings,()=>draftKingsOdds(key)):{events:[],issues:['Odds API key not configured']}),
+        memo('sharpapi',TTL.draftkings,()=>external('https://br-weathered-rain-b5vxpp21-sharpapifeed.compute.c-7.us-east-2.aws.neon.tech/')),
         memo('crypto',TTL.crypto,cryptoSpot)
       ]);
       const value=(r,fallback)=>r.status==='fulfilled'?r.value:fallback;
@@ -306,7 +306,7 @@ export default {
         kalshiStatus:'PRIVATE',polymarketStatus:'REFERENCE_ONLY',opportunities:[],
         quotes:{kalshi:k,draftkings:d.events,polymarket:p},providers:{
           kalshi:status(kr,'kalshi',k.length),polymarket:status(pr,'polymarket',p.length),
-          draftkings:status(dr,'draftkings',d.events.length,d.issues||[])},crypto});
+          draftkings:{...status(dr,'sharpapi',d.events.length,d.issues||[]),provider:'SharpAPI',refreshEveryMs:60000,dataDelaySeconds:d.dataDelaySeconds??null,sourceFetchedAt:d.observedAt||null,hasMore:d.hasMore===true}},crypto});
     }
     if(!path.startsWith('/api/'))return error(404,'Not found');
     if(!allowEnvToken(request))return error(401,'Invalid administrator token');

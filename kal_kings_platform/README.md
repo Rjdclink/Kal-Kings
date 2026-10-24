@@ -1,3 +1,13 @@
+## SharpAPI display connection
+
+The public dashboard now obtains DraftKings display data through the separate Neon `sharpapifeed` function. Its encrypted `SHARPAPI_KEY` environment value was sourced from the authorized repository variable `DRAFTKINGS_API_KEY`. No credential is included in code or browser responses. Existing dashboard environment values were preserved.
+
+The adapter uses only SharpAPI's GET odds endpoint, requests the first 100 pre-match DraftKings rows, omits inactive/stale rows, and retains source timestamps. It does not fetch recommendations, arbitrage results or deep links. The public connection does not feed the private matching/simulation routes.
+
+The dashboard polls every 3 seconds. DraftKings has a 60-second cache, and the adapter also caches requests and errors for 60 seconds per running instance. This is approximately one DraftKings refresh per 20 screen refreshes, not ten. Instance restarts or scaling can change the aggregate request cadence; these are not global quota guarantees. The observed free plan adds a separate 60-second source delay, shown in provider health. A cached quote is never retimestamped as a new source observation. Pagination is partial and exposed through hasMore.
+
+Validation: 12 Node tests passed for display normalization, timestamp/delay preservation, request caching, redaction, and dashboard wiring. Package sharpapi_feed/index.mjs at ZIP root as index.mjs for the adapter. The dashboard's existing three-file ZIP layout remains unchanged.
+
 # Kal Kings · Neon trading intelligence dashboard
 
 Single Neon Node.js 24 Function, source in `kal_kings_platform/` (a separate integration lane; does not modify `research_engine/` or `trading_dashboard/`). A live dashboard is served at `/`, with public `/health` and `/api/public-state` routes. All other API routes remain token-gated. GitHub Actions and Railway are not used.

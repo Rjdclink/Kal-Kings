@@ -64,6 +64,7 @@ test('Public state omits financial records and does not call private providers',
  const original=globalThis.fetch;const calls=[];
  globalThis.fetch=async url=>{
   calls.push(String(url));
+  if(String(url).includes('sharpapifeed'))return Response.json({events:[{id:'dk-fixture',outcomes:[{selection:'Fixture',american:100}]}],issues:[],dataDelaySeconds:60,observedAt:new Date().toISOString()});
   if(String(url).includes('/events?'))return Response.json({events:[{category:'Sports',title:'Fixture event',markets:[{ticker:'TEST',yes_ask_dollars:'0.5'}]}]});
   if(String(url).includes('/v1/markets?'))return Response.json({markets:[{slug:'fixture',category:'Sports',bestAskQuote:{value:'.4'}}]});
   return Response.json({price:'100',time:new Date().toISOString()});
@@ -76,7 +77,10 @@ test('Public state omits financial records and does not call private providers',
   assert.equal(body.access,'PUBLIC_READ_ONLY');assert.equal(body.crypto.length,2);
   assert.equal(body.quotes.kalshi.length,1);assert.equal(body.quotes.polymarket.length,1);
   assert.ok(calls.every(url=>!url.includes('/portfolio/')&&!url.includes('/account/')));
-  assert.deepEqual(body.providers.draftkings.issues,['Odds API key not configured']);
+  assert.equal(body.quotes.draftkings.length,1);assert.equal(body.providers.draftkings.dataDelaySeconds,60);
+  assert.equal(body.providers.draftkings.refreshEveryMs,60000);
+  await app.fetch(new Request('https://example.test/api/public-state'));
+  assert.equal(calls.filter(url=>url.includes('sharpapifeed')).length,1);
   assert.equal((await app.fetch(new Request('https://example.test/api/state'))).status,401);
   assert.equal((await app.fetch(new Request('https://example.test/api/dk/balance',{method:'POST',body:'{"amount":1}'}))).status,401);
   assert.equal((await app.fetch(new Request('https://example.test/api/public-state',{method:'POST'}))).status,401);
