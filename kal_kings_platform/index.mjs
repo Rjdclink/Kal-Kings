@@ -20,6 +20,7 @@ import {cashAvailableForReinvestment} from './kalshi_manager.mjs';
 import {normalizeKalshiBook,monteCarloExitDecision} from './quant.mjs';
 import {assessLiveKalshiEntry,historyForExit,summarizeQuantState} from './quant_runtime.mjs';
 import {selectHistorySamples} from './history_sampler.mjs';
+import {planOneTimeMicroOrder,interpretMicroReceipt} from './live_trade_test.mjs';
 
 const HTML=readFileSync(new URL('./dashboard.html',import.meta.url),'utf8');
 const KALSHI='https://external-api.kalshi.com';
@@ -363,6 +364,52 @@ async function submitSoloOrder(order){
  if(!payload||typeof payload.fill_count!=='string')throw Error('Unrecognized Kalshi execution receipt');
  return payload;
 }
+/** Explicit, one-time, at-most-three-cent production connectivity trade.
+ * NEVER called by the recurring autonomous strategy. Funds are real and the
+ * single speculative share can lose its full stake; no profitability claim.
+ */
+async function runOneTimeLiveTest(body){
+ const ticker=str(body?.ticker,128).toUpperCase();
+ if(!/^[A-Z0-9_-]{4,128}$/.test(ticker))return {status:'INVALID_TICKER'};
+ const prior=await sql('SELECT test_id,status,market_ticker,exchange_order_id,filled_contracts,updated_at FROM kal_kings_live_tests WHERE test_id=$1',['initial-micro-live-v1']);
+ if(prior.length)return {status:'ALREADY_ATTEMPTED',record:{status:prior[0].status,ticker:prior[0].market_ticker,filled:prior[0].filled_contracts,updatedAt:prior[0].updated_at}};
+ const account=await getKalshiAccount();
+ if(account.status!=='VERIFIED')return {status:'ACCOUNT_UNAVAILABLE'};
+ const [market,book]=await Promise.all([freshKalshiMarket(ticker),getKalshiOrderbook(ticker)]);
+ const decision=planOneTimeMicroOrder({ticker,marketStatus:market?'active':'unavailable',yesAsk:market?.yesAsk,book,balance:account.balance,positionsComplete:account.positionsComplete});
+ if(!decision.allowed)return {status:'NOT_ELIGIBLE',reason:decision.reason};
+ const testId='initial-micro-live-v1',clientId=randomUUID();
+ const reserved=await sql(`INSERT INTO kal_kings_live_tests(test_id,client_order_id,market_ticker,limit_price,estimated_max_debit,status)
+   VALUES($1,$2::uuid,$3,$4::numeric,$5::numeric,'SUBMITTING') ON CONFLICT (test_id) DO NOTHING RETURNING test_id`,
+   [testId,clientId,ticker,String(decision.price),String(decision.totalMaxDollars)]);
+ if(!reserved.length)return {status:'ALREADY_ATTEMPTED'};
+ const order={ticker,client_order_id:clientId,side:'bid',count:'1.00',price:decision.price.toFixed(4),
+   time_in_force:'fill_or_kill',self_trade_prevention_type:'taker_at_cross',cancel_order_on_pause:true};
+ let status='UNCERTAIN',orderId=null,confirmed=0;
+ try{
+   const posted=await submitSoloOrder(order);
+   orderId=typeof posted?.order_id==='string'&&posted.order_id.length<=128?posted.order_id:null;
+   let fetched=null;
+   if(orderId&&Number(posted?.fill_count)>0){
+     try{fetched=await kalshiPrivate('/trade-api/v2/portfolio/orders/'+encodeURIComponent(orderId));}
+     catch{/* Submitted but reconciliation unavailable; do not retry. */}
+   }
+   status=interpretMicroReceipt({post:posted,confirmed:fetched});
+   if(status==='FILLED')confirmed=Number(fetched?.order?.fill_count_fp)||0;
+ }catch{/* The request may have reached the venue; never resubmit blindly. */}
+ await sql(`UPDATE kal_kings_live_tests SET status=$2,exchange_order_id=$3,filled_contracts=$4::numeric,updated_at=now() WHERE test_id=$1`,
+  [testId,status,orderId,String(confirmed)]);
+ return {status,testId,ticker,yesPrice:decision.price,maxPossibleDebitDollars:decision.totalMaxDollars,
+   exchangeOrderId:orderId,confirmedFilledContracts:confirmed,
+   note:'One speculative, one-time connectivity test; no expected-profit claim. Ambiguous receipts are never retried.'};
+}
+async function getOneTimeLiveTest(){
+ const rows=await sql(`SELECT test_id,status,market_ticker,limit_price::text AS limit_price,estimated_max_debit::text AS estimated_max_debit,
+ filled_contracts::text AS filled_contracts,exchange_order_id,created_at,updated_at FROM kal_kings_live_tests ORDER BY created_at DESC LIMIT 1`);
+ return rows.length?{testId:rows[0].test_id,status:rows[0].status,ticker:rows[0].market_ticker,
+  price:Number(rows[0].limit_price),maxDebit:Number(rows[0].estimated_max_debit),
+  confirmedFilled:Number(rows[0].filled_contracts),orderId:rows[0].exchange_order_id,updatedAt:rows[0].updated_at}:null;
+}
 async function fetchKalshiSettlements(){
   const payload=await kalshiPrivate('/trade-api/v2/portfolio/settlements?limit=100');
   return Array.isArray(payload?.settlements)?payload.settlements:[];
@@ -611,6 +658,8 @@ export default {
       if(request.method==='GET'&&path==='/api/wagers')return reply({wagers:await getWagers()});
       if(request.method==='GET'&&path==='/api/automation/history')return reply({orders:await getAutoOrders()});
       if(request.method==='GET'&&path==='/api/kalshi/solo')return reply({orders:await getSoloOrders(),watches:await getPositionWatches(),settlements:await getBotSettlements()});
+      if(request.method==='GET'&&path==='/api/kalshi/micro-test')return reply({test:await getOneTimeLiveTest()});
+      if(request.method==='POST'&&path==='/api/kalshi/micro-test')return reply(await runOneTimeLiveTest(await request.json()));
       if(request.method==='GET'&&path==='/api/pairs')return reply({pairs:await getPairs()});
       if(request.method==='POST'&&path==='/api/dk/balance'){
         const body=await request.json();return reply(await updateBankroll(body.amount));
