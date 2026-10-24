@@ -35,6 +35,12 @@ export function collectKalshiSports(pages,observedAt=new Date().toISOString(),li
         seen.add(market.ticker);
         rows.push({id:label(market.ticker,140),event:label(event.title||event.event_ticker),
           label:label(market.yes_sub_title||market.title||market.ticker),yesAsk,noAsk,
+          // Preserve bids independently of asks. Bid-side history is required
+          // for actual sale-price monitoring; an ask alone is not an exit price.
+          yesBid:validAsk(market.yes_bid_dollars??(market.yes_bid!=null?Number(market.yes_bid)/100:null)),
+          noBid:validAsk(market.no_bid_dollars??(market.no_bid!=null?Number(market.no_bid)/100:null)),
+          yesBidDepth:decimal(market.yes_bid_size_fp??market.yes_bid_size),
+          noBidDepth:decimal(market.no_bid_size_fp??market.no_bid_size),
           yesDepth:decimal(market.yes_ask_size_fp??market.yes_ask_size),
           noDepth:decimal(market.no_ask_size_fp??market.no_ask_size),
           volume:decimal(market.volume_fp??market.volume)||0,
