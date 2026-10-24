@@ -5,6 +5,8 @@ from pathlib import Path
 import threading
 import time
 from .crypto import scan
+from .core import D
+from urllib.parse import urlsplit, parse_qs
 
 
 class Cache:
@@ -13,11 +15,13 @@ class Cache:
         self.data=None
         self.updated=0
         self.scanner=scanner
+        self.capital=None
 
-    def get(self):
+    def get(self, capital=None):
         with self.lock:
-            if self.data is None or time.monotonic()-self.updated>=60:
-                self.data=self.scanner()
+            if self.data is None or capital!=self.capital or time.monotonic()-self.updated>=60:
+                self.data=self.scanner() if capital is None else self.scanner(capital=capital)
+                self.capital=capital
                 self.updated=time.monotonic()
             return self.data
 
@@ -30,9 +34,19 @@ class Handler(BaseHTTPRequestHandler):
         if self.path=='/':
             body=Path(__file__).with_name('dashboard.html').read_bytes()
             content='text/html; charset=utf-8'
-        elif self.path=='/api/crypto':
+        elif urlsplit(self.path).path=='/api/crypto':
             try:
-                body=json.dumps(CACHE.get(),allow_nan=False).encode()
+                values=parse_qs(urlsplit(self.path).query,keep_blank_values=True)
+                if set(values)-{'capital'} or len(values.get('capital',['1000']))!=1:
+                    raise ValueError()
+                capital=D(values.get('capital',['1000'])[0])
+                if not capital.is_finite() or not D('1')<=capital<=D('1000000'):
+                    raise ValueError()
+            except Exception:
+                self.send_error(400,'Capital must be between 1 and 1000000 USD')
+                return
+            try:
+                body=json.dumps(CACHE.get(capital),allow_nan=False).encode()
             except Exception:
                 self.send_error(503,'Market data unavailable')
                 return

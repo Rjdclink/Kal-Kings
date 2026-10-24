@@ -149,7 +149,9 @@ def bootstrap_profit(prices, capital=D('1000'), fee_rate=D('.006'),
             'assumptions':'Six-hour moving-block resampling of recent hourly median USD closes; historical regime persists. Cost rates are illustrative. Correlated exchange prices are not independent evidence. No order fills, shorting, funding, taxes, outages or venue-default model.'}
 
 
-def scan(symbols=SYMBOLS, transport=public_json, now=None):
+def scan(symbols=SYMBOLS, transport=public_json, now=None, capital=D("1000")):
+    if not isinstance(capital,D) or not capital.is_finite() or not D("1")<=capital<=D("1000000"):
+        raise ValueError("Capital must be between 1 and 1000000 USD")
     if not symbols or len(set(symbols))!=len(symbols) or any(s not in SYMBOLS for s in symbols):
         raise ValueError('Use distinct supported symbols')
     now=time.time() if now is None else now
@@ -171,18 +173,18 @@ def scan(symbols=SYMBOLS, transport=public_json, now=None):
             symbol,venue=jobs[future]
             try:
                 book=future.result()
-                books[symbol].append(quote_buy(book,D('1000'),time.time()))
+                books[symbol].append(quote_buy(book,capital,time.time()))
             except Exception as exc:
                 book_errors[symbol][venue]=type(exc).__name__
     assets=[]
     for symbol in symbols:
         try:
             signal,prices=consensus(feeds[symbol],now)
-            forecast=bootstrap_profit(prices)
+            forecast=bootstrap_profit(prices,capital=capital)
             depth_forecasts=[]
             for book in books[symbol]:
                 try:
-                    adjusted=bootstrap_profit(prices,entry_slippage_rate=D(book['entry_cost_vs_mid_rate']))
+                    adjusted=bootstrap_profit(prices,capital=capital,entry_slippage_rate=D(book['entry_cost_vs_mid_rate']))
                     depth_forecasts.append({'venue':book['venue'],'forecast':adjusted,
                                             'basis':'Observed entry VWAP versus mid; future exit slippage and fees remain assumptions. Snapshot is not an executable quote.'})
                 except ValueError:
@@ -196,4 +198,4 @@ def scan(symbols=SYMBOLS, transport=public_json, now=None):
             assets.append({'symbol':symbol,'status':'UNAVAILABLE','reason':str(exc),'source_errors':errors[symbol]})
     assets.sort(key=lambda a:float(a.get('forecast',{}).get('expected_profit_dollars','-inf')),reverse=True)
     return {'mode':'PUBLIC_SPOT_RESEARCH','observed_at_utc_epoch':int(now),'refresh_seconds':60,'assets':assets,
-            'ranking_basis':'Modeled 24-hour net dollar return for the same $1000 illustrative long-only capital. Negative forecasts are retained; this is not a trade recommendation.'}
+            'ranking_basis':'Modeled 24-hour net dollar return for the requested illustrative long-only capital. Negative forecasts are retained; this is not a trade recommendation.'}
