@@ -1,5 +1,8 @@
 # Verification — 2026-10-24
 
+Latest production connectivity check — 2026-10-24: Neon deployment 2 now contains the transferred Kalshi credentials and protected endpoint access. HTTP 200; authentication VERIFIED; exchange and trading active; authenticated balance readable. This supersedes the earlier missing-credentials findings below. Live automation remains disabled; no orders were submitted. Readiness authentication does not establish full strategy/execution readiness.
+
+
 Configuration update: 46 tests pass. The connector now accepts an environment PEM secret or a mounted key file, supports escaped newlines, rejects conflicting key sources and redacts malformed-secret errors. GitHub settings and production authentication remain unverified because settings access and runtime secret injection are unavailable in this session.
 
 Deployment inspection: the connected Neon project named `Kal Kings` exists; its main branch returned an empty function list. No deployed Neon function was available to receive the credentials or run the connector. No changes were made to Neon configuration or data.

@@ -4,7 +4,7 @@ Node.js request/response readiness endpoint, compatible with Neon's `nodejs24` r
 
 Deployed 2026-10-24 to the existing Kal Kings project, main branch, function `kalshiconnection`. Neon reports deployment 1 completed. URL: https://br-weathered-rain-b5vxpp21-kalshiconnection.compute.c-7.us-east-2.aws.neon.tech/
 
-Only `KALSHI_ENVIRONMENT=production` was supplied. Kalshi credentials could not be accessed through the connected GitHub plugin; admin access is intentionally unconfigured until securely provisioned. No authenticated account connection has been established.
+Update 2026-10-24: after authenticated browser access to GitHub settings, the existing Kalshi key ID and private key were transferred into Neon's encrypted function environment. The stored base64 PKCS#8 key was wrapped in its PEM header/footer. A private admin access token was generated for the readiness endpoint. Deployment 2 completed. The protected production check returned HTTP 200, authentication VERIFIED, exchange active, trading active, and balance readable. No credential or balance values are recorded here. Live automation remains disabled and zero orders were submitted.
 
 Routes:
 
@@ -15,4 +15,4 @@ Runtime settings: `KALSHI_ENVIRONMENT` (`production` or `demo`), `KALSHI_API_KEY
 
 Package `index.mjs` at the ZIP root; no dependencies. Deploy using Neon function deployment with runtime `nodejs24`. Test with `node --test test.mjs`. Environment values are encrypted/write-only through Neon; future config-only deployments must include the complete intended environment map to avoid dropping existing settings.
 
-Authenticated redirects are blocked, requests time out after ten seconds, unsupported signing keys fail closed, and errors omit credentials and upstream bodies. Private endpoints remain unavailable until credentials and admin access are configured. Python analysis remains independently runnable and is not falsely reported as deployed here.
+Authenticated redirects are blocked, requests time out after ten seconds, unsupported signing keys fail closed, and errors omit credentials and upstream bodies. Private endpoints remain unavailable unless credentials and admin access are configured. Python analysis remains independently runnable and is not falsely reported as deployed here.
