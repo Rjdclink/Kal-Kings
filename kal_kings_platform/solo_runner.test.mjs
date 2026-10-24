@@ -59,3 +59,11 @@ test('worker records failure stage rather than pretending market has no opportun
  assert.equal(result.status,'SCANNER_UNAVAILABLE_MONITOR');
  assert.ok(!JSON.stringify(result).includes('secret internal detail'));
 });
+
+test('verified free cash from position monitor avoids redundant authenticated account fetch',async()=>{
+ const f=fixture({monitorPositions:async()=>({status:'MONITORED',freeCash:100,pendingReview:0}),
+  fetchAccount:async()=>{throw Error('second account query blocked by rate limit')}});
+ const result=await f.run(runInput);
+ assert.equal(result.status,'HEDGED');
+ assert.equal(f.calls.length,2);
+});
