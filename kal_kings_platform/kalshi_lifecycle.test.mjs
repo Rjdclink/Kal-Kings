@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {makeKalshiLifecycle} from './kalshi_lifecycle.mjs';
 const now=Date.parse('2026-10-24T20:00:00Z');
 const ticker='KXNFLGAME-2026-TEST';
-function fixture({balance=8,settlements=[],position='1.00',bid=.36,peak=.5,soloStatus='UNHEDGED',quoteAge=100,submitResponse={fill_count:'1.00',order_id:'exit'}}={}){
+function fixture({balance=8,settlements=[],position='1.00',bid=.36,peak=.5,soloStatus='UNHEDGED',quoteAge=100,settlementError=false,submitResponse={fill_count:'1.00',order_id:'exit'}}={}){
  const seen=[];let watchStatus='WATCHING';const sql=async (q,p=[])=>{
   seen.push({q,p});
   if(q.includes('FROM kal_kings_solo_orders'))return [{ticker,status:soloStatus,yes_filled:'1.00',no_filled:'0.00',yes_price:'.45',no_price:'.50'}];
@@ -15,7 +15,7 @@ function fixture({balance=8,settlements=[],position='1.00',bid=.36,peak=.5,soloS
   throw Error(q);
  };
  const submits=[];
- const deps={fetchAccount:async()=>({balance,holdings:[{ticker,position:Number(position)}]}),fetchSettlements:async()=>settlements,
+ const deps={fetchAccount:async()=>({balance,holdings:[{ticker,position:Number(position)}]}),fetchSettlements:async()=>{if(settlementError)throw Error('Provider HTTP 403');return settlements;},
   fetchMarket:async()=>({id:ticker,yesBid:bid,yesBidDepth:4,observedAt:new Date(now-quoteAge).toISOString()}),sql,
   submit:async order=>{submits.push(order);return submitResponse},createId:()=> '123e4567-e89b-42d3-a456-426614174000',now:()=>now};
  return {run:makeKalshiLifecycle(deps),seen,submits};
@@ -39,4 +39,14 @@ test('does not close personal or unconfirmed position not held on exchange',asyn
 test('partial fill is marked unresolved, without retrying order automatically',async()=>{
  const f=fixture({submitResponse:{fill_count:'0.25'}});const out=await f.run();assert.equal(out.exitsSubmitted,1);assert.equal(out.exitReceiptsConfirmed,0);
  assert.equal(f.seen.some(x=>x.q.includes('UPDATE kal_kings_position_watch')&&x.p[1]==='UNCERTAIN'),true);
+});
+
+test('failed settlement history feed does not block exchange-cash reuse and position checks',async()=>{
+ const f=fixture({balance:5,soloStatus:'HEDGED',settlementError:true});
+ const output=await f.run();
+ assert.equal(output.freeCash,5);
+ assert.equal(output.status,'MONITORED');
+ assert.equal(output.settlementFeed,'UNAVAILABLE');
+ assert.equal(output.pendingReview,0);
+ assert.equal(f.submits.length,0);
 });
