@@ -17,7 +17,7 @@ export function isNeonSoloTrigger(headers,body,now=Date.now()){
     body?.version===1&&body?.trigger?.type==='schedule'&&body.trigger.name==='kal-kings-solo-minute'&&
     Number.isFinite(scheduled)&&Math.abs(now-scheduled)<=120000;
 }
-export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,createId,monitorPositions=async()=>({}),now=Date.now}){
+export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,createId,quantRiskGate,monitorPositions=async()=>({}),recordSnapshots=async()=>{},now=Date.now}){
   return async ({invocationId,scheduledAt})=>{
     // Database idempotence also protects against webhook redelivery.
     const lock=await sql('INSERT INTO kal_kings_solo_runs(invocation_id,scheduled_at) VALUES($1,$2::timestamptz) ON CONFLICT DO NOTHING RETURNING invocation_id',[invocationId,scheduledAt]);
@@ -38,6 +38,12 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
         WHERE o.status IN ('UNHEDGED','UNCERTAIN','PARTIALLY_FILLED','YES_FILLED','SUBMITTING')
           AND (w.status IS NULL OR w.status<>'CLOSED') LIMIT 1`);
       if(exposures.length)return finish({status:'HALTED_PENDING_RECONCILIATION'});
+      // Preserve bounded real quote histories independently of bank funding.
+      // No-fill and no-funds cycles must not count toward profitable trades.
+      stage='QUOTE_HISTORY';
+      const currentQuotes=await fetchQuotes();
+      if(!Array.isArray(currentQuotes))return finish({status:'INVALID_PUBLIC_QUOTES'});
+      await recordSnapshots(currentQuotes);
       stage='ACCOUNT';
       if(monitored?.status==='ACCOUNT_UNAVAILABLE')return finish({status:'ACCOUNT_UNAVAILABLE'});
       const verifiedCash=Number(monitored?.freeCash);
@@ -45,10 +51,11 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
       // balance rather than issuing a second request every minute, which can
       // trigger provider rate limits and leave the worker unable to scan.
       const hasMonitoredCash=monitored?.status==='MONITORED' && Number.isFinite(verifiedCash) && verifiedCash>=0;
-      const balance=hasMonitoredCash?verifiedCash:Number((await fetchAccount())?.balance);
+      const account=hasMonitoredCash?monitored:await fetchAccount();
+      const balance=hasMonitoredCash?verifiedCash:Number(account?.balance);
       if(!Number.isFinite(balance)||balance<=0)return finish({status:'UNFUNDED'});
       stage='QUOTES';
-      const candidates=findKalshiSoloCandidates(await fetchQuotes(),{balance,now:now()});
+      const candidates=findKalshiSoloCandidates(currentQuotes,{balance,now:now()});
       if(!candidates.length)return finish({status:'NO_QUALIFYING_KALSHI_TRADE'});
       for(const idea of candidates){
         // Requery the exact market immediately before submitting. The scanner
@@ -57,37 +64,52 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
         const exact=await fetchMarket(idea.marketTicker);
         const refreshed=findKalshiSoloCandidates([exact],{balance,now:now()})[0];
         if(!refreshed)continue;
+        // Independent order-book, historical fill, and portfolio-risk decision.
+        // Missing, invalid, or inconclusive quantitative evidence cannot
+        // silently fall back to the indicative quote-based order size.
+        stage='QUANT_RISK';
+        let risk;
+        try{
+          risk=typeof quantRiskGate==='function'
+            ? await quantRiskGate({quote:exact,balance,holdings:account?.holdings,
+                positionsComplete:account?.positionsComplete,now:now()})
+            :{accepted:false,reason:'RISK_ENGINE_UNAVAILABLE'};
+        }catch{risk={accepted:false,reason:'RISK_ENGINE_UNAVAILABLE'};}
+        if(!risk?.accepted||!risk.candidate)continue;
+        const selected=risk.candidate;
+        if(selected.marketTicker!==refreshed.marketTicker||selected.source!=='KALSHI_ONLY'||
+           !Number.isInteger(selected.count)||selected.count<1)continue;
         const firstId=createId(),secondId=createId();
         stage='RESERVATION';
         const created=await sql(`INSERT INTO kal_kings_solo_orders(ticker,status,yes_client_order_id,no_client_order_id,contracts,yes_price,no_price,net_profit_dollars,capital_reserved_dollars,created_at)
           VALUES($1,'SUBMITTING',$2::uuid,$3::uuid,$4,$5,$6,$7,$8,now()) ON CONFLICT(ticker) DO NOTHING RETURNING ticker`,
-          [refreshed.marketTicker,firstId,secondId,String(refreshed.count),String(refreshed.yesPrice),String(refreshed.noPrice),String(refreshed.netProfitDollars),String(refreshed.requiredDollars)]);
+          [selected.marketTicker,firstId,secondId,String(selected.count),String(selected.yesPrice),String(selected.noPrice),String(selected.netProfitDollars),String(selected.requiredDollars)]);
         if(!created.length)continue;
-        const [yes,no]=kalshiSoloLegs(refreshed,[firstId,secondId]);
+        const [yes,no]=kalshiSoloLegs(selected,[firstId,secondId]);
         let yesFill=0,noFill=0;
         try{
           const response=await submit(yes);
-          const yesStatus=statusFromFill(response,refreshed.count);
+          const yesStatus=statusFromFill(response,selected.count);
           yesFill=Number(response?.fill_count)||0;
           await sql('UPDATE kal_kings_solo_orders SET yes_filled=$2,yes_order_id=$3,status=$4,updated_at=now() WHERE ticker=$1',
-            [refreshed.marketTicker,String(yesFill),String(response.order_id||'').slice(0,128)||null,yesStatus==='FILLED'?'YES_FILLED':yesStatus]);
+            [selected.marketTicker,String(yesFill),String(response.order_id||'').slice(0,128)||null,yesStatus==='FILLED'?'YES_FILLED':yesStatus]);
           if(yesStatus==='NOT_FILLED')return finish({status:'NOT_FILLED'});
           if(yesStatus!=='FILLED')return finish({status:'UNCERTAIN'});
           const opposite=await submit(no);
-          const noStatus=statusFromFill(opposite,refreshed.count);
+          const noStatus=statusFromFill(opposite,selected.count);
           noFill=Number(opposite?.fill_count)||0;
           const finalStatus=noStatus==='FILLED'?'HEDGED':noStatus==='NOT_FILLED'?'UNHEDGED':'UNCERTAIN';
           await sql('UPDATE kal_kings_solo_orders SET no_filled=$2,no_order_id=$3,status=$4,updated_at=now() WHERE ticker=$1',
-            [refreshed.marketTicker,String(noFill),String(opposite.order_id||'').slice(0,128)||null,finalStatus]);
-          return finish({status:finalStatus,marketTicker:refreshed.marketTicker,yesFilled:yesFill,noFilled:noFill,projectedNetProfitDollars:refreshed.netProfitDollars});
+            [selected.marketTicker,String(noFill),String(opposite.order_id||'').slice(0,128)||null,finalStatus]);
+          return finish({status:finalStatus,marketTicker:selected.marketTicker,yesFilled:yesFill,noFilled:noFill,projectedNetProfitDollars:selected.netProfitDollars});
         }catch{
           // A timeout can occur after execution. Never retry blindly.
           const state=yesFill>0?'UNHEDGED':'UNCERTAIN';
-          await sql('UPDATE kal_kings_solo_orders SET status=$2,updated_at=now() WHERE ticker=$1',[refreshed.marketTicker,state]);
-          return finish({status:state,marketTicker:refreshed.marketTicker});
+          await sql('UPDATE kal_kings_solo_orders SET status=$2,updated_at=now() WHERE ticker=$1',[selected.marketTicker,state]);
+          return finish({status:state,marketTicker:selected.marketTicker});
         }
       }
-      return finish({status:'NO_NEW_KALSHI_MARKET_ELIGIBLE'});
+      return finish({status:'NO_QUANT_APPROVED_KALSHI_TRADE'});
     }catch{
       return finish({status:`SCANNER_UNAVAILABLE_${stage}`});
     }

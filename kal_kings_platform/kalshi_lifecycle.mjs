@@ -5,18 +5,18 @@
 import {cashAvailableForReinvestment,settlementEvidence,assessManagedExit,buildReductionOrder} from './kalshi_manager.mjs';
 import {estimatedKalshiFee} from './engine.mjs';
 const number=x=>Number(x);
-export function makeKalshiLifecycle({fetchAccount,fetchSettlements,fetchMarket,sql,submit,createId,now=Date.now}){
+export function makeKalshiLifecycle({fetchAccount,fetchSettlements,fetchMarket,sql,submit,createId,recordQuantQuote=async()=>{},getQuantHistory=async()=>[],quantExit=()=>({status:'INSUFFICIENT_HISTORY',action:'UNKNOWN'}),now=Date.now}){
  return async function monitor(){
   const account=await fetchAccount();
   const cash=cashAvailableForReinvestment(account);
-  if(cash.status==='UNAVAILABLE')return {status:'ACCOUNT_UNAVAILABLE',freeCash:0,confirmedSettlements:0,exitsSubmitted:0,exitReceiptsConfirmed:0};
+  if(cash.status==='UNAVAILABLE'||account?.positionsComplete!==true)return {status:'ACCOUNT_UNAVAILABLE',freeCash:0,confirmedSettlements:0,exitsSubmitted:0,exitReceiptsConfirmed:0};
   const tracked=await sql("SELECT ticker,status,yes_filled::text AS yes_filled,no_filled::text AS no_filled,yes_price::text AS yes_price,no_price::text AS no_price FROM kal_kings_solo_orders WHERE status IN ('HEDGED','UNHEDGED','YES_FILLED','PARTIALLY_FILLED','UNCERTAIN','SUBMITTING') ORDER BY updated_at DESC LIMIT 100");
   let allSettlements=[],settlementFeed='VERIFIED';
   try{allSettlements=await fetchSettlements();}
   catch{settlementFeed='UNAVAILABLE';}
   const settled=Array.isArray(allSettlements)?allSettlements:[];
   const holdings=new Map((Array.isArray(account.holdings)?account.holdings:[]).map(p=>[p.ticker,p]));
-  const result={status:'MONITORED',settlementFeed,freeCash:cash.available,trackedPositions:tracked.length,confirmedSettlements:0,
+  const result={status:'MONITORED',settlementFeed,freeCash:cash.available,holdings:account.holdings,positionsComplete:true,trackedPositions:tracked.length,confirmedSettlements:0,
     exitsSubmitted:0,exitReceiptsConfirmed:0,pendingReview:0};
   for(const trade of tracked){
     const proof=settlementEvidence(settled,trade.ticker);
@@ -37,6 +37,10 @@ export function makeKalshiLifecycle({fetchAccount,fetchSettlements,fetchMarket,s
     try{market=await fetchMarket(trade.ticker);}catch{result.pendingReview++;continue;}
     const age=now()-Date.parse(market?.observedAt||'');
     const bid=number(market?.yesBid),depth=number(market?.yesBidDepth);
+    // Record only exchange-observed quotes. Monitoring never invents prices.
+    if(Number.isFinite(bid)&&bid>0&&bid<1&&age>=0&&age<=3000){
+      try{await recordQuantQuote(market);}catch{/* Missing journal cannot justify an order */}
+    }
     // High-water mark stores the best observed executable bid (not last trade).
     const maxPrior=number(prior[0]?.high_bid??trade.yes_price);
     const peak=Number.isFinite(bid)?Math.max(maxPrior,bid):maxPrior;
@@ -46,7 +50,19 @@ export function makeKalshiLifecycle({fetchAccount,fetchSettlements,fetchMarket,s
       WHERE kal_kings_position_watch.status='WATCHING'`,[trade.ticker,String(trade.yes_price),String(peak)]);
     const decision=assessManagedExit({entryPrice:number(trade.yes_price),bidPrice:bid,highestBid:peak,availableDepth:depth,
       quantity,quoteAgeMs:age,estimatedExitFee:estimatedKalshiFee(quantity,bid),stopLossPercent:12,takeProfitPercent:20,trailingPercent:10});
-    if(decision.action!=='SELL')continue;
+    // Historical Monte Carlo exit is additional evidence; it cannot suppress
+    // an already-triggered hard stop. Missing history means no MC signal.
+    let mc={status:'INSUFFICIENT_HISTORY',action:'UNKNOWN'};
+    if(decision.action!=='UNAVAILABLE'){
+      try{const history=await getQuantHistory(trade.ticker);
+        mc=quantExit({entryPrice:number(trade.yes_price),currentBid:bid,quantity,
+          observations:history,entryFee:0,exitFee:estimatedKalshiFee(quantity,bid)});
+      }catch{/* quant failure means existing stops remain operative */}
+    }
+    const mcSell=mc.status==='MODELED'&&mc.action==='SELL'&&
+      Number.isFinite(Number(mc.exitAdvantageDollars))&&
+      mc.exitAdvantageDollars>Math.max(.01,estimatedKalshiFee(quantity,bid));
+    if(decision.action!=='SELL'&&!mcSell)continue;
     const orderId=createId();
     const claimed=await sql(`UPDATE kal_kings_position_watch SET status='SUBMITTING',exit_client_order_id=$2::uuid,updated_at=now()
       WHERE ticker=$1 AND status='WATCHING' RETURNING ticker`,[trade.ticker,orderId]);

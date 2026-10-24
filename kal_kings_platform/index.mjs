@@ -17,6 +17,9 @@ import {findKalshiSoloCandidates,summarizeSoloOrders} from './kalshi_solo.mjs';
 import {makeSoloRunner,isNeonSoloTrigger} from './solo_runner.mjs';
 import {makeKalshiLifecycle} from './kalshi_lifecycle.mjs';
 import {cashAvailableForReinvestment} from './kalshi_manager.mjs';
+import {normalizeKalshiBook,monteCarloExitDecision} from './quant.mjs';
+import {assessLiveKalshiEntry,historyForExit,summarizeQuantState} from './quant_runtime.mjs';
+import {selectHistorySamples} from './history_sampler.mjs';
 
 const HTML=readFileSync(new URL('./dashboard.html',import.meta.url),'utf8');
 const KALSHI='https://external-api.kalshi.com';
@@ -281,6 +284,73 @@ async function automaticallyHedgeAcceptedDraftKingsTicket(ticket){
  }catch{return {status:'UNAVAILABLE',note:'Execution or reconciliation could not be verified; no automatic retry.'};}
 }
 
+// Independent quantitative screening, backed by actual exchange order-book depth.
+// Historical snapshots are observations, never claims of executed trades.
+async function getKalshiOrderbook(ticker){
+ if(!/^[A-Z0-9_-]{4,128}$/.test(ticker||''))throw Error('Invalid Kalshi ticker');
+ return external(`${KALSHI}/trade-api/v2/markets/${encodeURIComponent(ticker)}/orderbook?depth=30`);
+}
+async function recordQuantQuote(market){
+ const id=str(market?.id,128),bid=Number(market?.yesBid),ask=Number(market?.yesAsk);
+ const when=Date.parse(market?.observedAt||'');
+ if(!/^[A-Z0-9_-]{4,128}$/.test(id)||!validPrice(bid)||!validPrice(ask)||
+    !Number.isFinite(when)||Math.abs(Date.now()-when)>10000)return;
+ await sql(`INSERT INTO kal_kings_market_observations(ticker,observed_at,bid,ask)
+ VALUES($1,$2::timestamptz,$3::numeric,$4::numeric)
+ ON CONFLICT(ticker,observed_at) DO NOTHING`,[id,market.observedAt,bid.toFixed(4),ask.toFixed(4)]);
+}
+async function recordQuantSamples(quotes){
+ const batch=selectHistorySamples(quotes,Date.now(),12);
+ if(!batch.length)return 0;
+ const stored=await Promise.allSettled(batch.map(recordQuantQuote));
+ if(stored.some(x=>x.status==='rejected'))throw Error('Unable to persist market observations');
+ return batch.length;
+}
+async function getQuantHistory(ticker){
+ const rows=await sql(`SELECT observed_at AS "observedAt",bid::text AS bid,ask::text AS ask
+   FROM kal_kings_market_observations WHERE ticker=$1
+   ORDER BY observed_at DESC LIMIT 240`,[ticker]);
+ return rows.reverse().map(r=>({observedAt:r.observedAt,bid:Number(r.bid),ask:Number(r.ask)}));
+}
+async function getQuantExecutedFills(){
+ const rows=await sql(`SELECT contracts::text AS count,yes_filled::text AS yes_filled,
+ no_filled::text AS no_filled,status FROM kal_kings_solo_orders
+ WHERE status IN ('HEDGED','UNHEDGED','NOT_FILLED','PARTIALLY_FILLED')
+ ORDER BY updated_at DESC LIMIT 250`);
+ return rows;
+}
+async function getQuantDiagnostics(){
+ const [history,executions,rejections]=await Promise.all([
+ sql('SELECT COUNT(*)::int AS n FROM kal_kings_market_observations'),
+ sql(`SELECT COUNT(*)::int AS n FROM kal_kings_solo_orders
+ WHERE status IN ('HEDGED','UNHEDGED','NOT_FILLED','PARTIALLY_FILLED')`),
+ sql(`SELECT ticker,reason,accepted,calibration_status,observed_at FROM kal_kings_quant_decisions
+ ORDER BY observed_at DESC LIMIT 5`)
+ ]);
+ return {...summarizeQuantState({historySamples:Number(history[0]?.n||0),
+   executionSamples:Number(executions[0]?.n||0),decisions:rejections}),
+   recent:rejections.map(r=>({ticker:r.ticker,reason:r.reason,
+    accepted:r.accepted,confidence:r.calibration_status,at:r.observed_at}))};
+}
+async function quantRiskGate({quote,balance,holdings,positionsComplete,now}){
+ let output={accepted:false,reason:'QUANT_DATA_UNAVAILABLE'};
+ try{
+   const [raw,history,executions]=await Promise.all([
+     getKalshiOrderbook(quote.id),getQuantHistory(quote.id),getQuantExecutedFills()]);
+   await recordQuantQuote(quote);
+   output=assessLiveKalshiEntry({quote,bookResponse:raw,bankroll:balance,
+     holdings,positionsComplete,history,executions,now,trials:2500,seed:43});
+ }catch{/* No fallback to a price-only trade on missing market evidence */}
+ // Any failed audit write also disables execution of the proposed candidate.
+ await sql(`INSERT INTO kal_kings_quant_decisions(ticker,observed_at,accepted,reason,
+   model_expected_dollars,model_tail_dollars,calibration_status,proposed_count)
+   VALUES($1,now(),$2::boolean,$3,$4::numeric,$5::numeric,$6,$7::numeric)`,[
+  quote?.id||'UNKNOWN',Boolean(output.accepted),output.reason,
+  output.model?.meanPnl==null?null:String(output.model.meanPnl),
+  output.model?.meanWorst5Percent==null?null:String(output.model.meanWorst5Percent),
+  output.calibration?.status||'UNAVAILABLE',output.candidate?.count??null]);
+ return output;
+}
 // Independent Kalshi-only engine. Does not read the DraftKings ledger or a
 // reviewed Kalshi/DraftKings cross-venue match. The Neon timer drives it 24/7.
 async function submitSoloOrder(order){
@@ -299,10 +369,11 @@ async function fetchKalshiSettlements(){
 }
 const monitorKalshiPortfolio=makeKalshiLifecycle({fetchAccount:getKalshiAccount,
  fetchSettlements:fetchKalshiSettlements,fetchMarket:freshKalshiMarket,
+ recordQuantQuote,getQuantHistory,quantExit:monteCarloExitDecision,
  sql,submit:submitSoloOrder,createId:randomUUID,now:Date.now});
 const runSolo=makeSoloRunner({fetchAccount:getKalshiAccount,fetchQuotes:publicKalshi,
  fetchMarket:freshKalshiMarket,monitorPositions:monitorKalshiPortfolio,
- sql,submit:submitSoloOrder,createId:randomUUID,now:Date.now});
+ quantRiskGate,recordSnapshots:recordQuantSamples,sql,submit:submitSoloOrder,createId:randomUUID,now:Date.now});
 async function getPositionWatches(){
  const rows=await sql(`SELECT ticker,position_side,status,entry_price::text AS entry_price,
  high_bid::text AS high_bid,exit_fill_count::text AS exit_fill_count,updated_at
@@ -357,13 +428,14 @@ async function getKalshiAccount(){
   if(!requiredEnv().kalshiConfigured)return {status:'NOT_CONFIGURED',balance:null,holdings:[]};
   const [bal,position]=await Promise.all([
     kalshiPrivate('/trade-api/v2/portfolio/balance'),
-    kalshiPrivate('/trade-api/v2/portfolio/positions?limit=50')
+    kalshiPrivate('/trade-api/v2/portfolio/positions?limit=1000&count_filter=position')
   ]);
   const value=bal.balance_dollars!=null?Number(bal.balance_dollars):Number(bal.balance)/100;
   if(!Number.isFinite(value)||value<0)throw Error('Unexpected Kalshi balance response');
   const positions=Array.isArray(position.market_positions)?position.market_positions:[];
   return {status:'VERIFIED',balance:value,portfolioValue:bal.portfolio_value==null?null:Number(bal.portfolio_value)/100,
-    holdings:positions.slice(0,20).map(p=>({ticker:str(p.ticker),position:safeNumber(p.position_fp??p.position),marketExposure:Number(p.market_exposure_dollars??p.market_exposure??0)})),
+    holdings:positions.map(p=>({ticker:str(p.ticker),position:safeNumber(p.position_fp??p.position),marketExposure:Number(p.market_exposure_dollars??p.market_exposure??0)})),
+    positionsComplete:!position.cursor,
     observedAt:iso()};
 }
 
@@ -426,12 +498,12 @@ async function diagnostics(){
   checkedAt:iso()};
 }
 async function state(){
-  const [kr,pr,dr,ar,br,wr,pairsr,cr,polyAuth,tvAlerts,tvTrends,tvReady,autoHistory,soloHistory,watches,settledPositions]=await Promise.allSettled([
+  const [kr,pr,dr,ar,br,wr,pairsr,cr,polyAuth,tvAlerts,tvTrends,tvReady,autoHistory,soloHistory,watches,settledPositions,quantReport]=await Promise.allSettled([
     memo('kalshi',TTL.kalshi,publicKalshi),
     memo('polymarket',TTL.polymarket,publicPolymarket),
     memo('draftkings',TTL.draftkings,currentDraftKingsOdds),
     memo('account',TTL.account,getKalshiAccount),getBankroll(),getWagers(),getPairs(),
-    memo('crypto',TTL.crypto,cryptoSpot),memo('polyaccount',TTL.polyaccount,polyAccountCheck),getTradingViewAlerts(),memo('trends',TTL.trends,cryptoTrends),tradingViewEnabled(),getAutoOrders(),getSoloOrders(),getPositionWatches(),getBotSettlements()
+    memo('crypto',TTL.crypto,cryptoSpot),memo('polyaccount',TTL.polyaccount,polyAccountCheck),getTradingViewAlerts(),memo('trends',TTL.trends,cryptoTrends),tradingViewEnabled(),getAutoOrders(),getSoloOrders(),getPositionWatches(),getBotSettlements(),getQuantDiagnostics()
   ]);
   const value=(r,fallback)=>r.status==='fulfilled'?r.value:fallback;
   const k=value(kr,[]),p=value(pr,[]),d=value(dr,{events:[],issues:['Odds provider unavailable']});
@@ -470,6 +542,7 @@ async function state(){
    balances:{kalshi:account.balance,draftkings:bankroll.amount,polymarket:null,updatedAt:bankroll.updatedAt},
    holdings:account.holdings,kalshiStatus:account.status,polymarketStatus:value(polyAuth,{status:'UNAVAILABLE'}).status,crypto:enrichedCrypto,
    tradingView:{configured:value(tvReady,false),alertsReceived:alerts.length,alerts,source:'TradingView configured webhooks; spot indicators computed from Coinbase'},
+   quantitativeAnalysis:value(quantReport,{confidence:'DATA_UNAVAILABLE',verifiedExpectedProfit:null,recent:[]}),
    config:{...requiredEnv(),oddsFeedConfigured:true,neonStorageReady:br.status==='fulfilled'},
    quotes:{kalshi:k,polymarket:p,draftkings:d.events},
    opportunities,priceGaps,favorites,sportsSignals:signals,riskPolicy:allocationPolicy,wagers:value(wr,[]),
@@ -479,8 +552,8 @@ async function state(){
     funded:account.balance!=null&&account.balance>0,autoWithoutDraftKings:true,
     cashReadyForReinvestment:cashAvailableForReinvestment(account).available,
     monitoredExits:value(watches,[]),settlements:value(settledPositions,[]),
-    exitMethod:'Verified bot-owned position / fresh bid / reduce-only fill-or-kill order',
-    entryMethod:'Current positive net edge, not a forecast of the exact future price peak',
+    exitMethod:'Verified bot-owned position / observed-bid Monte Carlo plus stop/trailing exit / reduce-only IOC',
+    entryMethod:'Exchange orderbook depth and fees / simulation-conditioned execution / correlated portfolio risk',
     note:'No DraftKings ticket is required. Both Kalshi legs must execute; one-sided fills remain exposed.'},
    tradeBoard,tradeReadiness,
    topSports:sportsTop,agent:activeAgent(),
