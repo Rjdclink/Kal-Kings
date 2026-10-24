@@ -12,6 +12,7 @@ import {activeAgent} from './agents.mjs';
 import {parseTradingViewAlert,mergeCryptoAlerts,priceTrendFromCandles} from './tradingview.mjs';
 import {sharpFeedOdds} from './sharp.mjs';
 import {buildKalshiHedgePlan,kalshiV2Order} from './orders.mjs';
+import {buildTradeBoard,executionSummary,bankrollTradeStatus} from './trade_board.mjs';
 
 const HTML=readFileSync(new URL('./dashboard.html',import.meta.url),'utf8');
 const KALSHI='https://external-api.kalshi.com';
@@ -393,6 +394,9 @@ async function state(){
   const sportsTop={kalshi:topSports(k,10),draftkings:d.events.slice(0,10),polymarket:topSports(p,10)};
   const signals=directionalCandidates(reviewedPairs,k,d.events,account.balance);
   const allocationPolicy=account.balance!=null?riskPolicy(account.balance):null;
+  const tradeBoard=buildTradeBoard({opportunities,signals,priceGaps,favorites});
+  const ordersHistory=value(autoHistory,[]);
+  const tradeReadiness=bankrollTradeStatus({balance:account.balance,opportunities,riskPolicy:allocationPolicy});
   const alerts=value(tvAlerts,[]),trends=value(tvTrends,[]);
   const enrichedCrypto=mergeCryptoAlerts(value(cr,[]),alerts).map(row=>({...row,
     technical:trends.find(t=>t.symbol===row.symbol)||null}));
@@ -417,13 +421,14 @@ async function state(){
    config:{...requiredEnv(),oddsFeedConfigured:true,neonStorageReady:br.status==='fulfilled'},
    quotes:{kalshi:k,polymarket:p,draftkings:d.events},
    opportunities,priceGaps,favorites,sportsSignals:signals,riskPolicy:allocationPolicy,wagers:value(wr,[]),
-   automatedOrders:value(autoHistory,[]),
+   automatedOrders:ordersHistory,automatedExecutionSummary:executionSummary(ordersHistory),
+   tradeBoard,tradeReadiness,
    topSports:sportsTop,agent:activeAgent(),
-   trading:{funded:account.balance>0,automaticOrdersEnabled:true,mode:'KALSHI_HEDGE_AFTER_RECORDED_ACCEPTED_DRAFTKINGS_TICKET',draftKingsAutomaticOrdersEnabled:false,backgroundWorkerActive:false},
+   trading:{funded:tradeReadiness.funded,tradeReady:tradeReadiness.tradeReady,automaticOrdersEnabled:true,mode:'KALSHI_HEDGE_AFTER_RECORDED_ACCEPTED_DRAFTKINGS_TICKET',draftKingsAutomaticOrdersEnabled:false,backgroundWorkerActive:false},
    notes:['Provider quote timestamps determine freshness, not page refresh frequency.',
     'Polymarket US is reference-only with no funded positions.',
     'Favorites shown as market-implied confidence, not verified positive-EV wagers.',
-    'Risk controls remain active even with $0; allowance increases gradually with available Kalshi funds and is capped at $25 per position.',
+    'Risk scales with available bankroll; an exceptionally small account can be considered for a single affordable contract, but only on independently verified profitable terms.',
     'DraftKings via SharpAPI is market data only; no sportsbook wagering API is available.',
     'No cross-venue spread is risk-free until identical settlement rules and both fills are verified.'],
   };

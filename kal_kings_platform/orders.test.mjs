@@ -28,3 +28,13 @@ test('Kalshi V2 orders use fill-or-kill limits and unique IDs',()=>{
  const b=kalshiV2Order({ticker:'KXNFLGAME-TEST',count:12,yesPrice:.48,clientOrderId:'824e73a0-43cf-4a31-8722-06c343497c3a'});
  assert.deepEqual(b,{ticker:'KXNFLGAME-TEST',client_order_id:'824e73a0-43cf-4a31-8722-06c343497c3a',side:'bid',count:'12.00',price:'0.4800',time_in_force:'fill_or_kill',self_trade_prevention_type:'taker_at_cross',cancel_order_on_pause:true});
 });
+
+test('micro bankroll can create an affordable fully hedged trade without arbitrary $1 floor',()=>{
+ const microTicket={...ticket,odds:9900,stake:.01};
+ const microMarket={...market,yesAsk:.02,yesDepth:20};
+ const plan=buildKalshiHedgePlan({ticket:microTicket,mapping,market:microMarket,balance:.05,now});
+ assert.equal(plan.accepted,true);
+ assert.equal(plan.count,1);
+ assert.ok(plan.capitalRequired<=.05);
+ assert.ok(plan.minimumProfit>0);
+});

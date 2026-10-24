@@ -4,7 +4,7 @@
  * DraftKings wager and the exact market's rules have been independently reviewed.
  */
 import {evaluatePair,quoteAge,validPrice,estimatedKalshiFee} from './engine.mjs';
-import {riskPolicy} from './strategy.mjs';
+import {riskPolicy,adaptiveCapitalLimit} from './strategy.mjs';
 
 const fail=reason=>({accepted:false,reason});
 export function buildKalshiHedgePlan({ticket,mapping,market,balance,now=Date.now()}={}){
@@ -19,9 +19,12 @@ export function buildKalshiHedgePlan({ticket,mapping,market,balance,now=Date.now
   if(!validPrice(market?.yesAsk)||quoteAge(market,now)>3000||quoteAge(market,now)<0)
     return fail('MARKET_UNAVAILABLE_OR_STALE');
   const bank=Number(balance),depth=Math.floor(Number(market.yesDepth));
-  if(!Number.isFinite(bank)||bank<1||!Number.isFinite(depth)||depth<1)
+  if(!Number.isFinite(bank)||bank<=0||!Number.isFinite(depth)||depth<1)
     return fail('NO_AVAILABLE_BANKROLL_OR_DEPTH');
-  const limit=riskPolicy(bank).hardLossLimitDollars;
+  const policy=riskPolicy(bank);
+  const firstUnitCost=market.yesAsk+estimatedKalshiFee(1,market.yesAsk);
+  const adaptive=adaptiveCapitalLimit(policy,firstUnitCost);
+  const limit=adaptive.budget;
   const stake=Number(ticket.stake),odds=Number(ticket.odds);
   if(!Number.isFinite(stake)||stake<=0||!Number.isFinite(odds))return fail('INVALID_WAGER');
   let best=null;
@@ -35,7 +38,8 @@ export function buildKalshiHedgePlan({ticket,mapping,market,balance,now=Date.now
     if(!best||value.minimumProfit>best.minimumProfit)
       best={accepted:true,count,price:market.yesAsk,ticker:market.id,capitalRequired:expense,
         minimumProfit:value.minimumProfit,kalshiWinProfit:value.kalshiWins,dkWinProfit:value.draftKingsWins,
-        estimatedKalshiFee:estimatedFee,source:'User-confirmed DraftKings ticket + reviewed market rules'};
+        estimatedKalshiFee:estimatedFee,minimumTradeExceptionApplied:adaptive.minimumTradeExceptionApplied,
+        source:'User-confirmed DraftKings ticket + reviewed market rules'};
   }
   return best||fail('NO_POSITIVE_HEDGE_WITHIN_RISK_LIMIT');
 }

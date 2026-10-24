@@ -10,13 +10,27 @@ const quantile=(sorted,p)=>sorted[Math.min(sorted.length-1,Math.floor((sorted.le
 export function riskPolicy(bankroll){
   const b=Number(bankroll);
   if(!finite(b)||b<0)throw RangeError('Invalid bankroll');
-  // Increase gradually with free, uncommitted funds; dollar downside stays capped.
+  // Percentage increases with available bankroll. No fixed-dollar ceiling.
   const riskPercent=b<100?0.75:b<500?1:b<2500?1.5:b<10000?2:2.5;
-  const riskBudget=cents(Math.min(25,b*riskPercent/100));
+  const ordinaryRiskBudget=Math.min(b,b*riskPercent/100);
   return {bankrollDollars:cents(b),riskPercent,
-    tailLimitDollars:riskBudget,hardLossLimitDollars:riskBudget,
+    tailLimitDollars:ordinaryRiskBudget,hardLossLimitDollars:ordinaryRiskBudget,
+    minimumExecutableExceptionEligible:b>0,
     annualizedReturnTarget:null,
-    note:'Exposure is limited by actual loss at full settlement, not just the worst-tail average.'};
+    note:'The percentage is a normal allocation budget, not a fixed-dollar ceiling. A single affordable minimum-lot order may exceed that budget only if the trade has verified positive edge and passes all other checks; this may risk a substantial fraction of tiny balances.'};
+}
+
+/** One minimum unit is considered only AFTER market/edge/fee/freshness checks.
+ * The exception never creates an order, never exceeds free cash, and is not
+ * an exception to matching settlements or independently verified probability.
+ */
+export function adaptiveCapitalLimit(policy,minUnitCost){
+  const cost=Number(minUnitCost),available=Number(policy?.bankrollDollars);
+  const base=Number(policy?.hardLossLimitDollars);
+  if(!finite(cost)||cost<=0||!finite(available)||available<=0||!finite(base))
+    return {budget:0,minimumTradeExceptionApplied:false};
+  if(cost>available+1e-9)return {budget:base,minimumTradeExceptionApplied:false};
+  return {budget:Math.max(base,cost),minimumTradeExceptionApplied:cost>base+1e-9};
 }
 
 export function impliedTwoWay(outcomes,selection){
@@ -42,18 +56,24 @@ export function recommendedDirectional({bankroll,price,probability,depth,sourceA
   // Confidence and edge both affect allocation, without overruling worst-case loss.
   const confidenceWeight=Math.max(0.12,Math.min(1,(fair-.5)/.48));
   const edgeWeight=Math.max(0.25,Math.min(1,edge/.04));
-  const allocationBudget=policy.hardLossLimitDollars*confidenceWeight*edgeWeight;
   const lossPerContract=p+fee;
-  const contracts=Math.max(0,Math.min(Math.floor(depth),Math.floor(policy.hardLossLimitDollars/lossPerContract),Math.floor(allocationBudget/lossPerContract)));
+  const adaptive=adaptiveCapitalLimit(policy,lossPerContract);
+  // Model-weighted sizing for normal bankrolls; for a minimum-lot exception
+  // use exactly one unit, never the entire balance by default.
+  const weighted=policy.hardLossLimitDollars*confidenceWeight*edgeWeight;
+  const allocationBudget=Math.max(weighted,adaptive.minimumTradeExceptionApplied?lossPerContract:0);
+  const contracts=Math.max(0,Math.min(Math.floor(depth),Math.floor(adaptive.budget/lossPerContract),Math.floor(allocationBudget/lossPerContract)));
   if(contracts<1)return {accepted:false,reason:'INSUFFICIENT_RISK_BUDGET',policy};
   const spend=cents(contracts*lossPerContract);
-  if(spend>policy.hardLossLimitDollars+1e-8||spend>bankroll+1e-8)return {accepted:false,reason:'INSUFFICIENT_RISK_BUDGET',policy};
+  if(spend>adaptive.budget+1e-8||spend>bankroll+1e-8)return {accepted:false,reason:'INSUFFICIENT_RISK_BUDGET',policy};
   return {accepted:true,reason:'CANDIDATE',contracts,stakeDollars:spend,
     price:p,modelProbability:fair,marketImpliedProbability:p,
     edgePercentagePoints:Math.round(edge*10000)/100,
     expectedNetProfitDollars:cents(contracts*edge),maximumLossDollars:spend,
+    minimumTradeExceptionApplied:adaptive.minimumTradeExceptionApplied,
+    effectiveRiskPercent:Math.round(100000*spend/bankroll)/1000,
     confidenceWeight:Math.round(confidenceWeight*1000)/1000,
-    policy,note:'Conditional on an independently validated probability estimate; not a guarantee.'};
+    policy,note:'Conditional on an independently validated probability estimate. Minimum-lot exception may concentrate small bankrolls and is not a profit guarantee.'};
 }
 
 export function simulateDirectional({contracts,price,probability,fillProbability=1,trials=5000,seed=451,feePerContract=0}){
@@ -90,11 +110,13 @@ export function chooseHedge({kalshiAsk,dkOdds,kalshiBalance,dkBalance,availableD
     const fee=estimatedKalshiFee(count,kalshiAsk);
     const kCost=cents(count*kalshiAsk+fee);
     const dkStake=cents(count/decimal);
-    if(kCost>kb||dkStake>db||kCost>policy.hardLossLimitDollars||dkStake>policy.hardLossLimitDollars)break;
+    const kBudget=adaptiveCapitalLimit({...policy,bankrollDollars:kb},estimatedKalshiFee(1,kalshiAsk)+kalshiAsk);
+    const dkBudget=adaptiveCapitalLimit({...policy,bankrollDollars:db},cash(1/decimal));
+    if(kCost>kb||dkStake>db||kCost>kBudget.budget||dkStake>dkBudget.budget)break;
     const total=kCost+dkStake;
     const profit=cents(Math.min(count,dkStake*decimal)-total);
     if(profit>0&&(!best||profit>best.minimumNetProfit))best={kalshiContracts:count,kalshiCostDollars:kCost,dkStakeDollars:dkStake,
-      kalshiFeeDollars:fee,minimumNetProfit:profit,capitalRequired:cents(total),riskPolicy:policy,
+      kalshiFeeDollars:fee,minimumNetProfit:profit,capitalRequired:cents(total),riskPolicy:policy,minimumTradeExceptionApplied:kBudget.minimumTradeExceptionApplied||dkBudget.minimumTradeExceptionApplied,
       note:'Indicative only; both legs and identical settlement rules must be verified.'};
   }
   return best;
