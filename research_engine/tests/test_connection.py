@@ -1,6 +1,6 @@
 import base64
 import unittest
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import hashes,serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519,padding,rsa
 from kalresearch.connection import Connection,credentials,signature
 
@@ -16,6 +16,24 @@ class ConnectionTests(unittest.TestCase):
 
     def test_missing_credentials(self):
         with self.assertRaises(ValueError):credentials({})
+
+    def test_environment_pem_and_escaped_newlines(self):
+        key=ed25519.Ed25519PrivateKey.generate()
+        pem=key.private_bytes(serialization.Encoding.PEM,serialization.PrivateFormat.PKCS8,serialization.NoEncryption()).decode()
+        for value in (pem,pem.replace('\n','\\n')):
+            identifier,loaded=credentials({'KALSHI_API_KEY_ID':'test','KALSHI_PRIVATE_KEY':value})
+            self.assertEqual(identifier,'test')
+            self.assertEqual(signature(key,'123','/test'),signature(loaded,'123','/test'))
+
+    def test_ambiguous_key_sources_rejected(self):
+        with self.assertRaisesRegex(ValueError,'one private key source'):
+            credentials({'KALSHI_API_KEY_ID':'test','KALSHI_PRIVATE_KEY':'secret','KALSHI_PRIVATE_KEY_PATH':'a.pem'})
+
+    def test_bad_secret_not_exposed(self):
+        secret='sensitive-invalid-test-value'
+        with self.assertRaises(ValueError) as caught:
+            credentials({'KALSHI_API_KEY_ID':'test','KALSHI_PRIVATE_KEY':secret})
+        self.assertNotIn(secret,str(caught.exception))
 
     def test_readiness_no_orders_or_sensitive_output(self):
         calls=[]

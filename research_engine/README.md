@@ -65,7 +65,7 @@ Order-book observations are checked against a five-second age limit when created
 
 ## Authenticated Kalshi connection check
 
-Configure `KALSHI_API_KEY_ID` and `KALSHI_PRIVATE_KEY_PATH` in the runtime environment; the latter points to a locally mounted PEM private key. Do not commit credentials. Both documented RSA-PSS/SHA-256 and Ed25519 signing are supported. Then run:
+Configure `KALSHI_API_KEY_ID` and exactly one of `KALSHI_PRIVATE_KEY` (PEM secret, literal or escaped newlines) or `KALSHI_PRIVATE_KEY_PATH` (mounted PEM file) in the runtime environment. Do not commit credentials. Both documented RSA-PSS/SHA-256 and Ed25519 signing are supported. `KALSHI_ENVIRONMENT` can select `production` or `demo`; the CLI flag overrides it. Then run:
 
 ```sh
 python -m kalresearch.connection --environment production
@@ -74,3 +74,7 @@ python -m kalresearch.connection --environment production
 This checks exchange status and authenticated balance access without displaying balances or credentials. It does not place orders or activate a trading worker. Demo is the default environment; demo and production credentials are different. Requests cannot redirect to other hosts.
 
 At inspection on 2026-10-24, `main` and `feat/kalshi-neon-live` did not contain the claimed credential/integration files. Runtime credentials were also unavailable. Consequently live authentication remains unverified. The other integration lane must provide the configured credential location and execution implementation before full integration can be completed.
+
+Repository settings are separate from application runtime configuration. GitHub Actions repository variables live in the `vars` context and secrets in the `secrets` context; they do not automatically become environment variables in a deployed application. This repository intentionally has no Actions workflow. A hosting integration must map the named settings to the application environment. Store the PEM as a secret, not a plaintext configuration variable. No export, printing or copying of secret values into source is needed.
+
+Settings verification is blocked: the GitHub connector does not expose variables/secrets administration, and browser sign-in was declined. Runtime loading was verified with generated test keys, not the user's actual account. End-to-end connection must not be reported as verified until the production readiness check succeeds in the intended host.

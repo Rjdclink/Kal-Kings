@@ -24,15 +24,18 @@ def credentials(environ=None):
     env=os.environ if environ is None else environ
     key_id=env.get('KALSHI_API_KEY_ID','').strip()
     key_path=env.get('KALSHI_PRIVATE_KEY_PATH','').strip()
-    if not key_id or not key_path:
-        raise ValueError('Set KALSHI_API_KEY_ID and KALSHI_PRIVATE_KEY_PATH in the runtime environment')
+    key_pem=env.get('KALSHI_PRIVATE_KEY','').strip()
+    if not key_id or not (key_path or key_pem):
+        raise ValueError('Set KALSHI_API_KEY_ID and either KALSHI_PRIVATE_KEY or KALSHI_PRIVATE_KEY_PATH in the runtime environment')
+    if key_path and key_pem:
+        raise ValueError('Configure one private key source, not both')
     if any(c in key_id for c in '\r\n'):
         raise ValueError('Invalid API key identifier')
     try:
-        raw=Path(key_path).read_bytes()
+        raw=key_pem.replace('\\n','\n').encode() if key_pem else Path(key_path).read_bytes()
         key=serialization.load_pem_private_key(raw,password=None)
     except (OSError,ValueError,TypeError):
-        raise ValueError('Private key could not be loaded; check the configured path and PEM format') from None
+        raise ValueError('Private key could not be loaded; check the configured secret or file and PEM format') from None
     if not isinstance(key,(rsa.RSAPrivateKey,ed25519.Ed25519PrivateKey)):
         raise ValueError('Unsupported private key algorithm')
     return key_id,key
@@ -99,7 +102,7 @@ class Connection:
 
 def main():
     parser=argparse.ArgumentParser(description='Read-only Kalshi authentication and readiness check')
-    parser.add_argument('--environment',choices=tuple(HOSTS),default='demo')
+    parser.add_argument('--environment',choices=tuple(HOSTS),default=os.environ.get('KALSHI_ENVIRONMENT','demo'))
     args=parser.parse_args()
     try:
         key_id,key=credentials()

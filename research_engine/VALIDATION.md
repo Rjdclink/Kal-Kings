@@ -1,5 +1,9 @@
 # Verification — 2026-10-24
 
+Configuration update: 46 tests pass. The connector now accepts an environment PEM secret or a mounted key file, supports escaped newlines, rejects conflicting key sources and redacts malformed-secret errors. GitHub settings and production authentication remain unverified because settings access and runtime secret injection are unavailable in this session.
+
+Deployment inspection: the connected Neon project named `Kal Kings` exists; its main branch returned an empty function list. No deployed Neon function was available to receive the credentials or run the connector. No changes were made to Neon configuration or data.
+
 Latest: 43 tests pass, including four authenticated-connection tests using generated ephemeral keys and mocked HTTP responses. RSA-PSS and Ed25519 signatures were verified cryptographically. The production readiness command correctly reported missing runtime credentials; no real account authentication or order submission occurred.
 
 * 39 automated tests passed on Python 3.12. Coverage includes decimal validation, bid/ask normalization, depth, fees, stale/future/asynchronous quotes, settlement gaps, bankroll limits, Monte Carlo determinism and losses from unmatched legs, opportunity ranking, journal idempotency, exchange candle formats, stale data rejection and cache behavior. Additional spot-depth tests verify VWAP, exact quote preservation, crossed/stale/thin-book rejection and propagation of entry costs into profit estimates.
