@@ -23,7 +23,7 @@ import {selectHistorySamples} from './history_sampler.mjs';
 import {fetchCryptoSignals,fetchSportsSignals} from './predictive_feeds.mjs';
 import {fetchFinalCryptoConsensus} from './crypto_final_consensus.mjs';
 import {makeDirectionalRunner} from './directional_runner.mjs';
-import {selectCryptoIdea} from './crypto_candidate.mjs';
+import {rankCryptoCandidates} from './crypto_candidate.mjs';
 import {makeManualExecutor} from './manual_execution.mjs';
 import {makeDirectionalLifecycle} from './directional_lifecycle.mjs';
 import {rankStrategies} from './strategy_optimizer.mjs';
@@ -533,7 +533,7 @@ async function collectPredictiveStrategies(){
    }),{max:12});
  // Already-exceeded totals get FIRST re-price and fee verification.
  // Their preliminary quotes do not claim a guaranteed profit.
- const cryptoIdeas=cryptos.map(x=>selectCryptoIdea(x,{now})).filter(Boolean);
+ const cryptoIdeas=rankCryptoCandidates(cryptos,{now,max:6});
  // Reserve independent priority slots for both live sports strategies and
  // crypto: one busy sports event cannot starve the crypto automation queue.
  const ideas=[...totalIdeas.slice(0,8),...rankedLate.slice(0,6),...cryptoIdeas.slice(0,6)];
