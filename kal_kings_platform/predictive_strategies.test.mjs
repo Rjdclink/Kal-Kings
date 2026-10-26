@@ -1,0 +1,58 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {cryptoConsensus,planDirectionalTrade,assessLateGame,assessTotals} from './predictive_strategies.mjs';
+const now=Date.parse('2026-10-26T12:00:00.000Z');
+const tick=(source,start,last,age=1000)=>({source,symbol:'BTC',start,last,observedAt:new Date(now-age).toISOString()});
+const base=[tick('coinbase',80000,80300),tick('kraken',80010,80320),tick('bitstamp',79990,80280)];
+test('three independent fresh spot markets can agree on an upward trend',()=>{
+ const a=cryptoConsensus(base,{symbol:'BTC',now});
+ assert.equal(a.direction,'UP');assert.equal(a.agreeingSources,3);assert.equal(a.action,'SIGNAL_ONLY');
+});
+test('duplicates and stale sources do not create artificial majority',()=>{
+ const a=cryptoConsensus([base[0],base[0],base[1],tick('bitstamp',80000,80300,45000)],{symbol:'BTC',now});
+ assert.equal(a.direction,'UNKNOWN');assert.equal(a.sources,2);
+});
+test('opposing observations and materially mismatched spot prices are rejected',()=>{
+ const a=cryptoConsensus([base[0],base[1],tick('bitstamp',79990,79500)],{symbol:'BTC',now});
+ assert.equal(a.direction,'UNKNOWN');
+ const b=cryptoConsensus([base[0],base[1],tick('bitstamp',70000,70400)],{symbol:'BTC',now});
+ assert.equal(b.reason,'PRICE_DISAGREEMENT');
+});
+const contract={ticker:'KXBTC15M-26OCT261200-00',seriesTicker:'KXBTC15M',symbol:'BTC',status:'open',
+  rulesPrimary:"If the simple average of the sixty seconds of CF Benchmarks' BRTI before expiration is at least the average before opening then resolves to Yes.",
+  closeTime:new Date(now+4*60000).toISOString(),observedAt:new Date(now-1000).toISOString(),
+  yesAsk:.66,noAsk:.35,yesDepth:50,noDepth:50};
+test('consensus alone never silently authorizes money orders',()=>{
+ const c=cryptoConsensus(base,{symbol:'BTC',now});
+ const d=planDirectionalTrade({consensus:c,market:contract,bankroll:15,feePerContract:.03,now});
+ assert.equal(d.allowed,false);assert.equal(d.reason,'INDEPENDENT_PROBABILITY_NOT_VALIDATED');
+});
+test('a validated risk model can approve an affordable correctly mapped directional contract',()=>{
+ const c=cryptoConsensus(base,{symbol:'BTC',now});
+ const model={validated:true,probability:.91,sampleCount:150,holdoutCount:45,symbol:'BTC',direction:'UP',horizonMinutes:15,settlementBasis:'CF_BENCHMARKS_RTI',validatedAt:new Date(now-60000).toISOString()};
+ const d=planDirectionalTrade({consensus:c,market:contract,bankroll:15,feePerContract:.03,model,now});
+ assert.equal(d.allowed,true);assert.equal(d.side,'yes');assert.equal(d.contracts,1);
+});
+test('no direction mismatch or stale quote may authorize an order',()=>{
+ const c=cryptoConsensus(base,{symbol:'BTC',now});
+ const model={validated:true,probability:.91,sampleCount:150,holdoutCount:45,symbol:'BTC',direction:'UP',horizonMinutes:15,settlementBasis:'CF_BENCHMARKS_RTI',validatedAt:new Date(now-60000).toISOString()};
+ assert.equal(planDirectionalTrade({consensus:c,market:{...contract,seriesTicker:'KXETH15M'},bankroll:15,feePerContract:.03,model,now}).allowed,false);
+ assert.equal(planDirectionalTrade({consensus:c,market:{...contract,observedAt:new Date(now-60000).toISOString()},bankroll:15,feePerContract:.03,model,now}).allowed,false);
+});
+test('a commanding late lead is detected without claiming guaranteed value',()=>{
+ const d=assessLateGame({sport:'NFL',home:'Philadelphia Eagles',away:'Dallas Cowboys',homeScore:31,awayScore:10,period:4,clockSeconds:210,state:'in',updatedAt:new Date(now-1000).toISOString(),now});
+ assert.equal(d.direction,'Philadelphia Eagles');assert.equal(d.action,'REVIEW_ONLY');
+});
+test('pre-game, unverified, or stale score is rejected',()=>{
+ const d=assessLateGame({sport:'NFL',home:'Philadelphia',away:'Dallas',homeScore:31,awayScore:10,period:4,clockSeconds:210,state:'pre',updatedAt:new Date(now-1000).toISOString(),now});
+ assert.equal(d.direction,null);
+});
+test('weather and known injuries inform totals signals but never manufacture win probability',()=>{
+ const d=assessTotals({sport:'NFL',totalLine:43.5,homeScore:10,awayScore:3,period:2,clockSeconds:300,state:'in',weather:{windMph:22,gustMph:31,indoor:false},injuries:[{team:'home',role:'QB',status:'out'}],updatedAt:new Date(now-1000).toISOString(),now});
+ assert.equal(d.direction,'UNDER');assert.equal(d.eligibleForAutomation,false);
+ assert.ok(d.factors.some(s=>/wind/i.test(s)));
+});
+test('wind does not influence indoor-game analysis',()=>{
+ const d=assessTotals({sport:'NFL',totalLine:43.5,homeScore:10,awayScore:3,period:2,clockSeconds:300,state:'in',weather:{windMph:40,indoor:true},injuries:[],updatedAt:new Date(now-1000).toISOString(),now});
+ assert.equal(d.direction,null);
+});
