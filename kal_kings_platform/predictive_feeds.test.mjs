@@ -160,3 +160,16 @@ test('crypto direction can be DOWN while its matching NO contract remains availa
 test('all seven distinct price venues report their own research observations',async()=>{const r=await fetchCryptoSignals({fetcher:mockFetch,now,symbols:['BTC']});assert.deepEqual(r[0].spotFeeds.map(x=>x.source).sort(),['bitfinex','bitstamp','coinbase','gemini','kraken','kucoin','okx']);});
 
 test('five opening quotes produce one settlement-window reference',()=>{const close='2026-10-26T14:15:00Z',source=['coinbase','kraken','bitstamp','gemini','okx'].map(x=>({source:x,last:103,candles:[{time:Date.parse('2026-10-26T14:00:00Z')/1000,open:100}]}));const r=calculateCryptoWindowReference(source,close);assert.equal(r.sourceCount,5);assert.equal(r.referencePrice,100)});
+
+test('official Kalshi crypto floor strike replaces five-minute proxy as the trading target',async()=>{
+ const official={...market,status:'active',floor_strike:100};
+ const fetcher=async url=>{
+   if(url.includes('/markets?'))return {ok:true,json:async()=>({markets:[official]})};
+   return mockFetch(url);
+ };
+ const [signal]=await fetchCryptoSignals({fetcher,now,symbols:['BTC']});
+ assert.equal(signal.reference?.referencePrice,100);
+ assert.equal(signal.reference?.exactBenchmarkReference,true);
+ assert.equal(signal.model?.trials,2500);
+ assert.ok(signal.modeledWinProbability>.85);
+});
