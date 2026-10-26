@@ -64,3 +64,131 @@ export function walkForwardScore(rows,{minTraining=50,minHoldout=20}={}){
    executionApproved:false,
    note:'A historical holdout measurement is not a promise about future win probabilities.'};
 }
+
+const shortDate=date=>{
+ if(!/^\d{4}-\d\d-\d\d$/.test(date||''))return null;
+ const d=new Date(date+'T12:00:00Z');
+ if(!Number.isFinite(d.valueOf())||d.toISOString().slice(0,10)!==date)return null;
+ return String(d.getUTCDate()).padStart(2,'0')+
+  ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][d.getUTCMonth()]+
+  String(d.getUTCFullYear()%100).padStart(2,'0');
+};
+export function matchSportsOutcome(event,market){
+ const denied={matched:false,reason:'UNVERIFIED_EVENT_IDENTITY'};
+ const prefixes={NFL:'KXNFLGAME',NBA:'KXNBAGAME',NHL:'KXNHLGAME'};
+ const prefix=prefixes[event?.sport],date=shortDate(event?.date);
+ const home=String(event?.homeAbbreviation||'').toUpperCase(),
+   away=String(event?.awayAbbreviation||'').toUpperCase(),
+   selected=String(event?.selectedAbbreviation||'').toUpperCase();
+ if(!prefix||!date||!home||!away||home===away||![home,away].includes(selected)||
+    !/^[A-Z]{2,4}$/.test(home)||!/^[A-Z]{2,4}$/.test(away))return denied;
+ const ticker=String(market?.ticker||market?.id||'').toUpperCase();
+ const expected1=prefix+'-'+date+away+home+'-'+selected;
+ const expected2=prefix+'-'+date+home+away+'-'+selected;
+ return ticker===expected1||ticker===expected2?{matched:true,reason:'EXACT_DATE_TEAMS_AND_OUTCOME',
+   ticker,eventKey:prefix+'-'+date+away+home}:denied;
+}
+/** A possible value entry must be backed by a separately sourced live
+ * win-probability estimate AND a verified, presently executable order quote.
+ * It never derives independent probability from the Kalshi ask itself.
+ */
+export function assessKalshiValue({
+ market,side,probability,probabilitySource,sourceVerified=false,
+ marketMatchVerified=false,bankroll,holdings,feePerContract,
+ now=Date.now(),maxLossProbability=.15,minimumEdge=.02
+}={}){
+ const no=(reason,extra={})=>({allowed:false,reason,...extra});
+ if(!marketMatchVerified||sourceVerified!==true||probabilitySource!=='ESPN_LIVE_MODEL')
+   return no('INDEPENDENT_MODEL_OR_RULES_UNVERIFIED');
+ const p=num(probability),cash=num(bankroll),fee=num(feePerContract);
+ if(!finite(p)||p<=0||p>=1||p<1-maxLossProbability-1e-9)
+   return no('MODELED_LOSS_EXCEEDS_LIMIT');
+ if(!finite(cash)||cash<=0||!finite(fee)||fee<0)return no('CASH_OR_FEES_UNVERIFIED');
+ if(!['yes','no'].includes(side)||!['open','active'].includes(market?.status))
+   return no('MARKET_NOT_TRADABLE');
+ const age=now-Date.parse(market?.observedAt||'');
+ if(!finite(age)||age<0||age>3000)return no('STALE_KALSHI_QUOTE');
+ const px=num(market[side+'Ask']),depth=num(market[side+'Depth']);
+ if(!finite(px)||px<=0||px>=1||!finite(depth)||depth<1)
+   return no('INSUFFICIENT_EXECUTABLE_DEPTH');
+ if(!Array.isArray(holdings))return no('HOLDINGS_UNVERIFIED');
+ if(holdings.some(x=>x?.ticker===market.ticker&&num(x.position)!==0))
+   return no('EXISTING_EVENT_EXPOSURE');
+ const debit=px+fee,edge=p-debit;
+ if(edge<minimumEdge-1e-9)return no('NO_NET_POSITIVE_EDGE',{edge:round(edge)});
+ const budget=Math.min(cash,cash<100?cash*.25:cash*.02);
+ if(debit>budget+1e-9)return no('INSUFFICIENT_RISK_BUDGET');
+ const count=Math.min(Math.floor(depth),Math.floor(cash/debit),Math.max(1,Math.floor(budget/debit)),10);
+ if(count<1)return no('INSUFFICIENT_CAPITAL');
+ return {allowed:true,reason:'INDEPENDENT_VALUE_APPROVED',strategy:'LIVE_SPORTS_VALUE',
+   ticker:market.ticker,side,contracts:count,limitPrice:px,feePerContract:fee,
+   estimatedMaxDebitDollars:round(debit*count,4),
+   expectedNetDollars:round(edge*count,4),modeledLossFrequency:round(1-p),
+   modeledWinProbability:round(p),marketProbability:round(px),
+   confirmation:'Live independently sourced estimate, not a guaranteed return',
+   note:'A live forecast is uncertain and must be rechecked before placing an order.'};
+}
+/** Simple transparent live-score projection. Not calibrated; research only. */
+export function assessTotalsProjection({
+ sport,totalLine,homeScore,awayScore,period,clockSeconds,state='in',updatedAt,
+ weather={},injuries=[],now=Date.now()
+}={}){
+ const base={status:'INSUFFICIENT_CONTEXT',direction:null,
+   estimatedUnderProbability:null,eligibleForAutomation:false};
+ const league={NFL:{periods:4,seconds:900,sigma:12},NBA:{periods:4,seconds:720,sigma:20},
+   NHL:{periods:3,seconds:1200,sigma:3}}[sport];
+ const h=num(homeScore),a=num(awayScore),line=num(totalLine),per=num(period),
+   clk=num(clockSeconds),age=now-Date.parse(updatedAt||'');
+ if(!league||state!=='in'||!finite(h)||!finite(a)||h<0||a<0||
+    !finite(line)||line<=0||!finite(per)||per<1||per>league.periods||
+    !finite(clk)||clk<0||clk>league.seconds||
+    !finite(age)||age<0||age>90000)return base;
+ const elapsed=(per-1)*league.seconds+(league.seconds-clk),total=league.periods*league.seconds;
+ if(elapsed<=0)return base;
+ const remaining=total-elapsed,observed=h+a;
+ const rawRate=observed/elapsed;
+ let factor=1;const factors=[];
+ if(sport==='NFL'&&weather?.indoor!==true){
+   if(num(weather.windMph)>=18){factor*=.86;factors.push('Strong wind');}
+   if(num(weather.precipitationMm)>=4){factor*=.92;factors.push('Heavy precipitation');}
+ }
+ for(const x of Array.isArray(injuries)?injuries:[]){
+   if(['out','inactive'].includes(String(x?.status||'').toLowerCase())&&
+     ['QB','RB1','WR1','PG','C'].includes(String(x?.role||'').toUpperCase())){
+     factor*=.96;factors.push('Verified offensive absence');}
+ }
+ const projected=observed+rawRate*remaining*factor;
+ const sigma=league.sigma*Math.max(.35,Math.sqrt(remaining/total));
+ const z=(line-projected)/sigma;
+ const under=1/(1+Math.exp(-1.702*z));
+ return {status:'UNCALIBRATED_TOTALS_PROJECTION',direction:under>=.5?'UNDER':'OVER',
+   estimatedUnderProbability:round(under,4),estimatedOverProbability:round(1-under,4),
+   projectedTotal:round(projected,2),totalLine:line,remainingSeconds:remaining,
+   factors,eligibleForAutomation:false,probabilityCalibrated:false,
+   note:'A scoring-pace scenario, not a verified win probability. No automatic bet allowed.'};
+}
+export function rankStrategies(rows,{max=10}={}){
+ const candidates=(Array.isArray(rows)?rows:[]).filter(x=>
+   x?.allowed===true&&finite(num(x.expectedNetDollars))&&num(x.expectedNetDollars)>0&&
+   finite(num(x.estimatedMaxDebitDollars))&&num(x.estimatedMaxDebitDollars)>0&&
+   finite(num(x.modeledLossFrequency))&&num(x.modeledLossFrequency)<=.15);
+ const sorted=candidates.map(x=>({...x,
+   riskAdjustedScore:round(num(x.expectedNetDollars)/num(x.estimatedMaxDebitDollars),5)}))
+   .sort((a,b)=>b.riskAdjustedScore-a.riskAdjustedScore||
+     b.expectedNetDollars-a.expectedNetDollars);
+ const picked=[],seen=new Set();
+ for(const row of sorted){
+   const key=String(row.eventKey||row.ticker||row.marketTicker||row.id||'');
+   if(!key||seen.has(key))continue;
+   seen.add(key);picked.push(row);
+   if(picked.length>=max)break;
+ }
+ return picked;
+}
+export function adaptiveExitThresholds({volatilityPct=0,confidence=.5}={}){
+ const v=Math.max(0,Math.min(25,finite(num(volatilityPct))?num(volatilityPct):0));
+ const c=Math.max(0,Math.min(1,finite(num(confidence))?num(confidence):.5));
+ return {stopLossPercent:round(Math.max(6,Math.min(15,12-(c-.5)*4)),2),
+   takeProfitPercent:round(Math.min(45,15+v*.5),2),
+   trailingPercent:round(Math.min(22,6+v*.65),2)};
+}
