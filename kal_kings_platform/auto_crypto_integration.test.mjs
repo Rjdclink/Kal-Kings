@@ -8,7 +8,7 @@ const start=Date.parse('2026-10-26T11:00:00Z')/1000;
 const candles=Array.from({length:39},(_,i)=>{const t=start+i*300;
  const p=t>=Date.parse('2026-10-26T14:00:00Z')/1000?100+(t-Date.parse('2026-10-26T14:00:00Z')/1000)/300*2:95+(i*.13);
  return{t,open:p,close:p+1,hi:p+2,lo:p-1,vol:8}});
-const market={ticker:'KXBTC15M-26OCT261015-15',status:'active',yes_ask_dollars:'0.7000',
+const market={ticker:'KXBTC15M-26OCT261015-15',status:'active',floor_strike:100,yes_ask_dollars:'0.7000',
  no_ask_dollars:'0.3100',yes_ask_size_fp:'40.00',no_ask_size_fp:'40.00',
  close_time:new Date(now+120000).toISOString(),
  rules_primary:"If the simple average of the sixty seconds of CF Benchmarks' BRTI before 10:15 AM EDT is at least the simple average of the preceding sixty seconds, then the market resolves to Yes."};
