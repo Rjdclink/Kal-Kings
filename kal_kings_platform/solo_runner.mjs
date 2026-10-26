@@ -10,6 +10,15 @@ const statusFromFill=(r,count)=>{
   if(n===0)return 'NOT_FILLED';
   return n>=count?'FILLED':'PARTIALLY_FILLED';
 };
+/** Stable five-second slot across authenticated dashboard tabs and sessions.
+ * The unique DB invocation lock is shared with the minute scheduler.
+ */
+export function activeScanSlot(now=Date.now()){
+ if(!Number.isFinite(now)||now<0)throw RangeError('Invalid scan clock');
+ const slot=Math.floor(now/5000)*5000;
+ return {invocationId:'dashboard-5s-'+slot,
+   scheduledAt:new Date(slot).toISOString()};
+}
 export function isNeonSoloTrigger(headers,body,now=Date.now()){
   const invoke=headers?.['x-neon-trigger-invocation-id'];
   const scheduled=Date.parse(body?.data?.scheduled_at||'');
