@@ -103,6 +103,13 @@ export function parseLiveWinProbability(summary,event,now=Date.now()){
    const scoreboardPeriod=Number(event?.status?.period??competition?.status?.period);
    const lastPeriod=Number(play?.period?.number);
    const observed=now-Date.parse(play?.wallclock||'');
+   const scoreClock=event?.status?.clock??competition?.status?.clock;
+   const playClockMatch=/^(\d{1,2}):(\d{2})$/.exec(String(play?.clock?.displayValue||''));
+   const lastClock=playClockMatch?60*Number(playClockMatch[1])+Number(playClockMatch[2]):null;
+   // Scores can be unchanged for several minutes while the model becomes stale.
+   // Require play clock agreement when both clocks are supplied.
+   if(scoreClock!=null&&lastClock!=null&&Number.isFinite(Number(scoreClock))&&
+      Math.abs(Number(scoreClock)-lastClock)>30)return unavailable;
    if(!play||!Number.isFinite(observed)||observed<0||observed>90000||
      !Number.isFinite(scoreboardPeriod)||!Number.isFinite(lastPeriod)||
      scoreboardPeriod!==lastPeriod||
