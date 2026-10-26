@@ -52,7 +52,7 @@ export function recommendedDirectional({bankroll,price,probability,depth,sourceA
   const fee=feePerContract===null?estimatedKalshiFee(1,p):Number(feePerContract);
   if(!finite(fee)||fee<0)return {accepted:false,reason:'INVALID_FEE',policy};
   const edge=fair-p-fee;
-  if(edge<=0.01)return {accepted:false,reason:'NO_POSITIVE_EDGE',edgePerContract:cents(edge),policy};
+  if(edge<=1e-9)return {accepted:false,reason:'NO_POSITIVE_EDGE',edgePerContract:cents(edge),policy};
   // Confidence and edge both affect allocation, without overruling worst-case loss.
   const confidenceWeight=Math.max(0.12,Math.min(1,(fair-.5)/.48));
   const edgeWeight=Math.max(0.25,Math.min(1,edge/.04));
@@ -69,7 +69,7 @@ export function recommendedDirectional({bankroll,price,probability,depth,sourceA
   return {accepted:true,reason:'CANDIDATE',contracts,stakeDollars:spend,
     price:p,modelProbability:fair,marketImpliedProbability:p,
     edgePercentagePoints:Math.round(edge*10000)/100,
-    expectedNetProfitDollars:cents(contracts*edge),maximumLossDollars:spend,
+    expectedNetProfitDollars:Math.round(contracts*edge*10000)/10000,maximumLossDollars:spend,
     minimumTradeExceptionApplied:adaptive.minimumTradeExceptionApplied,
     effectiveRiskPercent:Math.round(100000*spend/bankroll)/1000,
     confidenceWeight:Math.round(confidenceWeight*1000)/1000,
