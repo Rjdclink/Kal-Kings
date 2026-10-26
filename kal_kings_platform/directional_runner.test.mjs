@@ -15,7 +15,7 @@ function fixture(override={}){
   if(q.includes('UPDATE kal_kings_directional_orders'))return [];
   return [];
  };
- const deps={sql,fetchMarket:async()=>({id:ticker,...idea.market,yesAsk:.7,yesDepth:12}),
+ const deps={sql,fetchMarket:async requested=>({...idea.market,id:requested,ticker:requested,yesAsk:.7,yesDepth:12}),
   fetchOrderbook:async()=>book,
   fetchFeeSchedule:async()=>({feeType:'quadratic',feeMultiplier:1}),
   submit:async o=>{orders.push(o);return {order_id:'abc',fill_count:o.count};},
