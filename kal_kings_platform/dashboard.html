@@ -111,7 +111,18 @@ function renderUniverse(){
    `<div class="ledgerline"><div><strong>${esc(m.title||m.ticker)}</strong><div class="tiny">${esc(m.category)} · ${esc(m.ticker)}</div></div><div class="number">${m.yesAsk==null?'—':(100*Number(m.yesAsk)).toFixed(1)+'¢'}<div class="tiny">YES ask · research</div></div></div>`).join(''):
    '<div class="tiny">No usable price quotes found in this sampled page.</div>';
 }
-function render(){renderStatus();renderOp();renderShortlist();renderWagers();renderAutoOrders();renderProviders();renderFeeds();renderPredictive();renderUniverse();}
+function renderDirectional(){
+ const status=data.scannerStatus||{},details=status.details||{};
+ const reported=status.status||'NO_SCANNER_RESULT';
+ const explanation=status.reason||details.directionalReason||'No independently verified net-positive price found yet';
+ $('#scanReason').textContent=reported.replaceAll('_',' ')+' · '+explanation.replaceAll('_',' ')+
+   ' · '+(details.universeScanned||0)+' market quotes checked in latest broad scan';
+ const orders=data.directionalOrders||[];
+ $('#directionalOrders').innerHTML=orders.length?orders.slice(0,8).map(x=>
+   `<div class="ledgerline"><div><strong>${esc(x.ticker)}</strong><div class="tiny">${esc(x.strategy)} · ${esc(x.status)} · ${time(x.updated_at)}</div></div><div class="number">${esc(x.filled)} / ${esc(x.contracts)}<div class="tiny">verified fills</div></div></div>`).join(''):
+   '<div class="tiny">No independently executed directional orders have been confirmed.</div>';
+}
+function render(){renderStatus();renderOp();renderShortlist();renderWagers();renderAutoOrders();renderProviders();renderFeeds();renderPredictive();renderUniverse();renderDirectional();}
 async function refresh(){if(pending||!admin)return;pending=true;const n=++seq;try{const incoming=await api('/api/state');if(n!==seq)return;data=incoming;render();}catch(e){if(String(e.message).includes('administrator')){authenticated(false);return;}$('#liveDot').classList.add('off');$('#liveLabel').textContent='Connection issue';$('#synced').textContent='Last attempt: '+new Date().toLocaleTimeString();}finally{pending=false;}}
 $('#sportsTab').onclick=()=>{active='sports';$('#sportsTab').classList.add('active');$('#cryptoTab').classList.remove('active');renderFeeds();};$('#cryptoTab').onclick=()=>{active='crypto';$('#cryptoTab').classList.add('active');$('#sportsTab').classList.remove('active');renderFeeds();};
 $('#balanceForm').addEventListener('submit',async ev=>{ev.preventDefault();$('#balanceError').textContent='';try{await api('/api/dk/balance','POST',{amount:Number($('#dkInput').value)});$('#dkInput').value='';await refresh();}catch(e){$('#balanceError').textContent=e.message;}});
