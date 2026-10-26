@@ -857,6 +857,8 @@ export default {
       if(request.method==='GET'&&path==='/api/wagers')return reply({wagers:await getWagers()});
       if(request.method==='GET'&&path==='/api/automation/history')return reply({orders:await getAutoOrders()});
       if(request.method==='GET'&&path==='/api/kalshi/solo')return reply({orders:await getSoloOrders(),watches:await getPositionWatches(),settlements:await getBotSettlements()});
+      if(request.method==='POST'&&path==='/api/kalshi/crypto-cycle')
+        return reply(await runCryptoCycle('dashboard'));
       if(request.method==='GET'&&path==='/api/kalshi/manual/orders')return reply({orders:await getManualOrders()});
       if(request.method==='POST'&&path==='/api/kalshi/manual/preview')
         return reply(await manualOrders.preview(await request.json()));
