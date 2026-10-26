@@ -197,7 +197,28 @@ function renderDirectional(){
    `<div class="ledgerline"><div><strong>${esc(x.ticker)}</strong><div class="tiny">${esc(x.strategy)} · ${esc(x.status)} · ${time(x.updated_at)}</div></div><div class="number">${esc(x.filled)} / ${esc(x.contracts)}<div class="tiny">verified fills</div></div></div>`).join(''):
    '<div class="tiny">No independently executed directional orders have been confirmed.</div>';
 }
-function render(){renderStatus();renderOp();renderShortlist();renderWagers();renderAutoOrders();renderProviders();renderFeeds();renderPredictive();renderUniverse();renderDirectional();}
+function renderCryptoAndManualStatus(){
+ const cycle=data.cryptoCycleStatus||{},last=data.scannerStatus||{};
+ const active=cycle.status||'NO_SCANS_RECORDED',
+   checked=cycle.checkedAt||null,age=checked?Date.now()-Date.parse(checked):Infinity;
+ let label;
+ if(age>90000)label='Waiting for active scanner';
+ else if(active==='NO_MODELED_POSITIVE_VALUE')label=(cycle.scanned||0)+' coins checked · no current positive-value entry';
+ else if(active==='SCANNER_BUSY'||active==='ALREADY_CHECKED')label='Scanning live contracts';
+ else if(active==='FILLED'||active==='DIRECTIONAL_FILLED')label='Exchange-confirmed crypto order filled';
+ else label=active.replaceAll('_',' ').toLowerCase()+' · '+(cycle.scanned||0)+' coins checked';
+ $('#cryptoCycleStatus').textContent=label;
+ const rows=data.manualOrderHistory||[];
+ const statuses={FILLED:'Filled',NOT_FILLED:'Not filled',
+  PARTIALLY_FILLED:'Partly filled',REJECTED:'Rejected by Kalshi',
+  UNCERTAIN:'Awaiting exchange reconciliation',SUBMITTING:'Checking order receipt',
+  NOT_ELIGIBLE:'Quote changed / not available'};
+ $('#manualHistory').innerHTML=rows.length?
+  '<div class="detail-title">Recent manual orders</div>'+
+   rows.slice(0,5).map(x=>`<div class="status-line"><span>${esc(x.ticker)} · ${esc(x.side?.toUpperCase())}</span><span>${esc(statuses[x.status]||x.status)}${x.reason?' · '+esc(x.reason.replaceAll('_',' ').toLowerCase()):''}</span></div>`).join(''):
+   '<div class="tiny">No confirmed manual orders yet.</div>';
+}
+function render(){renderStatus();renderOp();renderShortlist();renderWagers();renderAutoOrders();renderProviders();renderFeeds();renderPredictive();renderUniverse();renderDirectional();renderCryptoAndManualStatus();}
 async function refresh(){if(pending||!admin)return;pending=true;const n=++seq;try{const incoming=await api('/api/state');if(n!==seq)return;data=incoming;render();}catch(e){if(String(e.message).includes('administrator')){authenticated(false);return;}$('#liveDot').classList.add('off');$('#liveLabel').textContent='Connection issue';$('#synced').textContent='Last attempt: '+new Date().toLocaleTimeString();}finally{pending=false;}}
 $('#sportsTab').onclick=()=>{active='sports';$('#sportsTab').classList.add('active');$('#cryptoTab').classList.remove('active');renderFeeds();};$('#cryptoTab').onclick=()=>{active='crypto';$('#cryptoTab').classList.add('active');$('#sportsTab').classList.remove('active');renderFeeds();};
 $('#balanceForm').addEventListener('submit',async ev=>{ev.preventDefault();$('#balanceError').textContent='';try{await api('/api/dk/balance','POST',{amount:Number($('#dkInput').value)});$('#dkInput').value='';await refresh();}catch(e){$('#balanceError').textContent=e.message;}});
