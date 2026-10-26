@@ -176,3 +176,12 @@ test('confirmed zero-fill can be retried on a fresh quote after cooldown, never 
  assert.equal(later.status,'FILLED');assert.equal(f.orders.length,2);
  assert.notEqual(f.orders[0].client_order_id,f.orders[1].client_order_id);
 });
+
+test('70 to 85 percent forecast may auto-buy commanding late leader when net price edge is positive',async()=>{
+ const f=fixture({fetchOrderbook:async()=>({orderbook_fp:{
+   yes_dollars:[['0.4000','12.00']],no_dollars:[['0.5500','12.00']]}})});
+ const outcome=await f.runner({ideas:[{...idea,probability:.78}],
+   account:{status:'VERIFIED',balance:15,holdings:[],positionsComplete:true}});
+ assert.equal(outcome.status,'FILLED');
+ assert.equal(f.orders.length,1);
+});
