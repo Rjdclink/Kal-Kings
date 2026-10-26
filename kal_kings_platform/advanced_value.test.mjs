@@ -45,3 +45,18 @@ test('clinched live totals can rank without fictitious model-loss percentages',(
  assert.equal(rankStrategies([candidate]).length,1);
  assert.equal(rankStrategies([{...candidate,conditionalOutcomeVerified:false}]).length,0);
 });
+
+test('independently verified fractional positive value is considered despite old two-cent floor',()=>{
+ const q={...market,yesAsk:.88,yesDepth:3};
+ const v=assessKalshiValue({market:q,side:'yes',probability:.9,
+   sourceVerified:true,marketMatchVerified:true,probabilitySource:'ESPN_LIVE_MODEL',
+   bankroll:15,holdings:[],feePerContract:.015,now:NOW});
+ assert.equal(v.allowed,true);
+ assert.ok(v.expectedNetDollars>0);
+});
+test('flat or negative independently modeled net value cannot qualify',()=>{
+ const v=assessKalshiValue({market:{...market,yesAsk:.89},
+   side:'yes',probability:.9,sourceVerified:true,marketMatchVerified:true,
+   probabilitySource:'ESPN_LIVE_MODEL',bankroll:15,holdings:[],feePerContract:.01,now:NOW});
+ assert.equal(v.allowed,false);
+});
