@@ -18,3 +18,10 @@ export function selectCryptoIdea(signal,{now=Date.now()}={}){
   referencePrice:Number(signal.reference.referencePrice),referenceVerified:true,
   sourceVerified:true,marketMatchVerified:true,updatedAt:signal.updatedAt};
 }
+
+export function rankCryptoCandidates(signals,{now=Date.now(),max=6}={}){
+ return (Array.isArray(signals)?signals:[]).map(signal=>selectCryptoIdea(signal,{now}))
+  .filter(Boolean)
+  .sort((a,b)=>b.agreeingSources-a.agreeingSources||b.probability-a.probability)
+  .slice(0,Math.max(1,Math.min(12,max)));
+}
