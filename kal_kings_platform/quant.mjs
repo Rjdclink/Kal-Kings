@@ -14,6 +14,8 @@ const score=x=>Math.max(0,Math.min(1,x));
 const pointAge=(x)=>Date.parse(x?.observedAt??x?.observed_at??'');
 
 function normalizedLevels(raw){
+ // A valid book can have bids on just one side; that opposite array may be null.
+ if(raw==null)return [];
  if(!Array.isArray(raw))throw RangeError('Missing exchange depth');
  const levels=[];
  for(const entry of raw){
@@ -26,7 +28,7 @@ function normalizedLevels(raw){
 }
 export function normalizeKalshiBook(payload){
  const fp=payload?.orderbook_fp;
- if(!fp)throw RangeError('Kalshi fixed-point book missing');
+ if(!fp||fp.yes_dollars==null&&fp.no_dollars==null)throw RangeError('Kalshi fixed-point book missing');
  const yes=normalizedLevels(fp.yes_dollars).sort((a,b)=>b.price-a.price);
  const no=normalizedLevels(fp.no_dollars).sort((a,b)=>b.price-a.price);
  // Kalshi only displays bids: the NO bid at p implies an executable YES ask at 1-p.
