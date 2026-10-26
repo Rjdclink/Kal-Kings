@@ -43,9 +43,11 @@ export async function spotMomentum(fetcher,symbol,now){
    if(j.error?.length)throw Error('Kraken data error');
    const array=Object.values(j.result||{}).find(Array.isArray)||[];
    rows=array.map(x=>({time:x[0],open:x[1],high:x[2],low:x[3],close:x[4],volume:x[6]}));
-  }else{
+  }else if(source==='bitstamp'){
    j=await json(fetcher,`https://www.bitstamp.net/api/v2/ohlc/${pair.bitstamp}/?step=300&limit=75`);
    rows=(j.data?.ohlc||[]).map(x=>({time:x.timestamp,open:x.open,high:x.high,low:x.low,close:x.close,volume:x.volume}));
+  }else{
+   rows=await additionalSpotCandles(fetcher,symbol,source);
   }
   return momentum(rows,{symbol,source,now});
  });
