@@ -95,14 +95,19 @@ export function matchSportsOutcome(event,market){
 export function assessKalshiValue({
  market,side,probability,probabilitySource,sourceVerified=false,
  marketMatchVerified=false,bankroll,holdings,feePerContract,
- now=Date.now(),maxLossProbability=.30,minimumEdge=0,maxBankrollFraction=null
+ now=Date.now(),maxLossProbability=.30,minimumEdge=0,maxBankrollFraction=null,consensusConfidenceScorePercent=null
 }={}){
  const no=(reason,extra={})=>({allowed:false,reason,...extra});
  if(!marketMatchVerified||sourceVerified!==true||
    !['ESPN_LIVE_MODEL','CRYPTO_SCENARIO_PROXY'].includes(probabilitySource))
    return no('INDEPENDENT_MODEL_OR_RULES_UNVERIFIED');
  const p=num(probability),cash=num(bankroll),fee=num(feePerContract);
- if(!finite(p)||p<=0||p>=1||p<1-maxLossProbability-1e-9)
+ const isCrypto=probabilitySource==='CRYPTO_SCENARIO_PROXY';
+ const score=num(consensusConfidenceScorePercent);
+ // Consensus adjusts *decision confidence*, never the empirical win probability
+ // or estimated return. Without an explicit score, preserve the legacy guard.
+ if(!finite(p)||p<=0||p>=1||(
+     isCrypto&&finite(score)?score<70:p<1-maxLossProbability-1e-9))
    return no('MODELED_LOSS_EXCEEDS_LIMIT');
  if(!finite(cash)||cash<=0||!finite(fee)||fee<0)return no('CASH_OR_FEES_UNVERIFIED');
  if(!['yes','no'].includes(side)||!['open','active'].includes(market?.status))
@@ -133,6 +138,7 @@ export function assessKalshiValue({
    estimatedMaxDebitDollars:round(debit*count,4),
    expectedNetDollars:round(edge*count,4),modeledLossFrequency:round(1-p),
    modeledWinProbability:round(p),marketProbability:round(px),
+   consensusConfidenceScorePercent:isCrypto&&finite(score)?score:null,
    confirmation:'Live independently sourced estimate, not a guaranteed return',
    note:'A live forecast is uncertain and must be rechecked before placing an order.'};
 }

@@ -1,5 +1,17 @@
 # Kal Kings | Sports, crypto and prediction market dashboard
 
+## Kalshi-only trading and research update (2026-10-26)
+
+Only Kalshi submits trades. DraftKings remains a background odds/reference source; its betting, bankroll, paired arbitrage, and hedge-execution endpoints are removed. The dashboard shows Kalshi available cash, filled positions awaiting settlement, confirmed settlements, sports/crypto strategies and crawler health.
+
+Crypto: 4 of 7 votes is monitor-only (+10 confidence points). Five, six, seven votes get +15, +20, +30 decision confidence points, with 20%, 30%, 40% maximum free-cash allowances. These scoring bonuses are not claimed as real win probabilities; actual Monte Carlo forecasts, Kalshi executable prices, fees and expected value still govern real-money approval.
+
+Sports: officially verified scores already across the OVER threshold are eligible for a Monte Carlo-sized 75-80% free-cash allowance; late-game commanding leads use sport-specific lead and remaining time, with escalating 10%, 20%, 35%, 50% caps. Sports Monte Carlo controls sizing only, not entry qualification. Verification of market settlement rules, positive conditional payout, adequate order-book depth, authentication and confirmed fills remains required.
+
+Order reconciliation: a matched resting order is canceled through Kalshi and its terminal status must be reread before the local ledger changes; ambiguous records are not falsely marked unfilled. Neon minute scans and authenticated reconciliation are enabled.
+
+Firecrawl-free context research: LegalWhat-derived public HTML crawler; markdown.new (published 500 requests/day/IP); Jina Reader (published no-key 20 requests/minute/IP, sometimes blocks shared IPs); and optional Crawl4AI Cloud (published 1,000 credits/month, configured using CRAWL4AI_KEY). Adapters rotate and fail over; scraped text never independently authorizes trades.
+
 ## Current Neon deployment (October 26, 2026)
 
 Kal Kings runs on **Neon Functions**, with one-minute unattended scheduled scans and additional five-second authenticated scans **while the dashboard is open**. The dashboard itself refreshes every three seconds; provider data can arrive more slowly. There is currently no separate always-on five-second worker when the dashboard is closed.

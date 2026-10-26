@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {generateKeyPairSync,verify} from 'node:crypto';
-import app,{kalshiHeaders,polymarketHeaders,sql,evaluatedMatches,publicKalshi} from './index.mjs';
+import app,{kalshiHeaders,polymarketHeaders,sql,publicKalshi} from './index.mjs';
 
 test('Dashboard HTML responds at root with clear Kal Kings name and no embedded secrets',async()=>{
  const res=await app.fetch(new Request('https://example.test/'));
@@ -46,12 +46,6 @@ test('Neon SQL layer parameterizes rather than interpolates, uses TLS origin',as
  assert.deepEqual(JSON.parse(got.opts.body),{query:'SELECT $1 as cents',params:['12000']});
  assert.equal(got.opts.headers['Neon-Connection-String'],'postgresql://user:pw@ep-test.us-east-2.aws.neon.tech/king');
 });
-test('Unreviewed quote set cannot produce fabricated profitable opportunities',()=>{
- const k=[{id:'K-1',yesAsk:0.3,updatedAt:new Date().toISOString()}];
- const d=[{id:'DK-1',updatedAt:new Date().toISOString(),outcomes:[{selection:'A',american:200}]}];
- assert.deepEqual(evaluatedMatches([],k,d,100),[]);
-});
-
 test('Sports-only Kalshi requests sample eight sports series rather than repeating two',async()=>{
  const previous=globalThis.fetch; const calls=[];
  globalThis.fetch=async url=>{
@@ -107,4 +101,20 @@ test('TradingView public webhook rejects missing or incorrect shared passphrase 
 test('TradingView webhook rejects unsafe method',async()=>{
  const r=await app.fetch(new Request('https://example.test/webhooks/tradingview',{method:'GET'}));
  assert.equal(r.status,405);
+});
+
+test('only Kalshi can execute: old DraftKings betting, balance, pair and hedging endpoints are gone',async()=>{
+ const prior=process.env.KALKINGS_ADMIN_TOKEN;
+ process.env.KALKINGS_ADMIN_TOKEN='testing-only-server-key-with-32-bytes-0001';
+ try{
+  const auth={'x-kal-kings-admin':process.env.KALKINGS_ADMIN_TOKEN,'content-type':'application/json'};
+  for(const path of ['/api/dk/balance','/api/dk/wager','/api/dk/settle','/api/pairs','/api/simulate','/api/wagers','/api/automation/history']){
+   const meth=['/api/pairs','/api/wagers','/api/automation/history'].includes(path)?'GET':'POST';
+   const response=await app.fetch(new Request('https://example.test'+path,{method:meth,headers:auth,body:meth==='POST'?'{}':undefined}));
+   assert.equal(response.status,404,path);
+  }
+ }finally{
+   if(prior==null)delete process.env.KALKINGS_ADMIN_TOKEN;
+   else process.env.KALKINGS_ADMIN_TOKEN=prior;
+ }
 });

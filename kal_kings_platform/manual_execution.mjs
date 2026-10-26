@@ -16,7 +16,7 @@ export function classifyKalshiManualError(err){
    exchangeStatus:Number.isInteger(code)&&code>0?code:null};
 }
 export function makeManualExecutor({sql,fetchAccount,fetchMarket,fetchOrderbook,
- fetchFeeSchedule,fetchOrders=async()=>[],submit,createId,now=Date.now}){
+ fetchFeeSchedule,fetchOrders=async()=>[],cancelOrder=async()=>null,submit,createId,now=Date.now}){
  async function livePlan({ticker,side,count}){
    const [account,market,book,fees]=await Promise.all([
      fetchAccount(),fetchMarket(ticker),fetchOrderbook(ticker),fetchFeeSchedule(ticker)
@@ -111,7 +111,7 @@ export function makeManualExecutor({sql,fetchAccount,fetchMarket,fetchOrderbook,
      note:status==='UNCERTAIN'?'Exchange receipt was inconclusive; do not retry before reconciling Kalshi.':
        'Only exchange-confirmed fills represent purchased contracts.'};
  }
- async function reconcilePending({readOrderHistory=fetchOrders}={}){
+ async function reconcilePending({readOrderHistory=fetchOrders,cancelUnfilledOrder=cancelOrder}={}){
    if(typeof readOrderHistory!=='function')return {checked:0,confirmed:0};
    const pending=await sql(`SELECT id,ticker,contracts,client_order_id,status
       FROM kal_kings_manual_intents
@@ -129,16 +129,36 @@ export function makeManualExecutor({sql,fetchAccount,fetchMarket,fetchOrderbook,
      if(!match||typeof match.order_id!=='string')continue;
      const n=Number(match.fill_count_fp??match.fill_count);
      if(!Number.isFinite(n)||n<0||n>Number(row.contracts))continue;
+     // A RESTING unfilled order must be canceled at Kalshi before local cleanup.
+     // Cancellation and its confirmation are separate requests to handle fills
+     // that race with cancellation; unknown orders must remain uncertain.
+     let verified=match,verifiedCount=n;
+     if(match.status==='resting'||match.status==='pending'){
+       if(typeof cancelUnfilledOrder!=='function')continue;
+       try {
+         const canceled=await cancelUnfilledOrder(match.order_id,row.ticker);
+         if(canceled?.order_id!==match.order_id)continue;
+         const latest=await readOrderHistory(row.ticker);
+         const found=(Array.isArray(latest)?latest:[]).find(x=>
+           x.ticker===row.ticker&&x.client_order_id===row.client_order_id&&
+           x.order_id===match.order_id);
+         if(!found||!['canceled','executed'].includes(found.status))continue;
+         verified=found;
+         verifiedCount=Number(found.fill_count_fp??found.fill_count);
+         if(!Number.isFinite(verifiedCount)||verifiedCount<0||
+           verifiedCount>Number(row.contracts))continue;
+       }catch{continue}
+     }
      let next;
-     if(n>=Number(row.contracts))next='FILLED';
-     else if(n>0)next='PARTIALLY_FILLED';
-     else if(['canceled','executed'].includes(match.status))next='NOT_FILLED';
+     if(verifiedCount>=Number(row.contracts))next='FILLED';
+     else if(verifiedCount>0&&['canceled','executed'].includes(verified.status))next='PARTIALLY_FILLED';
+     else if(verifiedCount===0&&['canceled','executed'].includes(verified.status))next='NOT_FILLED';
      else continue;
      await sql(`UPDATE kal_kings_manual_intents
        SET status=$2,exchange_order_id=$3,filled_count=$4::numeric,
        last_error=NULL,updated_at=now()
        WHERE id=$1::uuid AND status IN ('UNCERTAIN','SUBMITTING')`,
-       [row.id,next,match.order_id,String(n)]);
+       [row.id,next,verified.order_id,String(verifiedCount)]);
      confirmed++;
    }
    return {checked,confirmed};

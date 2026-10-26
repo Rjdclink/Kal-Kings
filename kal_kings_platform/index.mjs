@@ -4,15 +4,13 @@
  */
 import {readFileSync} from 'node:fs';
 import {createPrivateKey, sign, timingSafeEqual, createHash, createCipheriv, createDecipheriv, randomBytes, randomUUID, constants} from 'node:crypto';
-import {evaluatePair,monteCarlo,rankCandidates,quoteAge,validPrice,americanToDecimal,estimatedKalshiFee,estimatedKalshiBuyDebit,cash} from './engine.mjs';
-import {riskPolicy,chooseHedge} from './strategy.mjs';
+import {validPrice,estimatedKalshiBuyDebit} from './engine.mjs';
+import {riskPolicy} from './strategy.mjs';
 import {favoriteWatchlist,directionalCandidates} from './sports.mjs';
 import {collectKalshiSports,collectPolymarketSports,topSports,cryptoUniverse,discoverQuotedGaps} from './feeds.mjs';
 import {activeAgent} from './agents.mjs';
 import {parseTradingViewAlert,mergeCryptoAlerts,priceTrendFromCandles} from './tradingview.mjs';
 import {sharpFeedOdds} from './sharp.mjs';
-import {buildKalshiHedgePlan,kalshiV2Order} from './orders.mjs';
-import {buildTradeBoard,executionSummary,bankrollTradeStatus} from './trade_board.mjs';
 import {findKalshiSoloCandidates,summarizeSoloOrders} from './kalshi_solo.mjs';
 import {makeSoloRunner,isNeonSoloTrigger,activeScanSlot} from './solo_runner.mjs';
 import {makeKalshiLifecycle} from './kalshi_lifecycle.mjs';
@@ -26,7 +24,9 @@ import {makeDirectionalRunner} from './directional_runner.mjs';
 import {selectCryptoIdea,rankCryptoCandidates} from './crypto_candidate.mjs';
 import {makeManualExecutor} from './manual_execution.mjs';
 import {makeDirectionalLifecycle} from './directional_lifecycle.mjs';
-import {rankStrategies} from './strategy_optimizer.mjs';
+import {sportsLeadTier} from './sports_allocation.mjs';
+import {makeResearchCrawlerPool} from './research_crawlers.mjs';
+import {settlementDashboardState} from './settlement_dashboard.mjs';
 import {verifyExceededTotal} from './total_strategy.mjs';
 import {makeUniverseScanner} from './universe_service.mjs';
 import {recordForecasts,resolveForecasts,getStrategyPerformance,getDirectionalOrders} from './strategy_history.mjs';
@@ -41,6 +41,14 @@ const KALSHI_SPORTS_SERIES=['KXNFLGAME','KXNBAGAME','KXMLBGAME','KXNHLGAME','KXC
 const TTL={trends:90000,kalshi:3000,polymarket:8000,draftkings:Math.max(60000,Number(process.env.ODDS_POLL_MS)||60000),account:6000,crypto:12000,polyaccount:30000};
 const LIMIT=200;
 const cache=new Map();
+const researchCrawlerPool=makeResearchCrawlerPool({fetcher:(...args)=>fetch(...args)});
+async function supplementalSportsResearch(){
+ // Lower-priority: never approve a trade, and never consume the main scanner's
+ // bounded five-second market validation window.
+ return memo('research_public_sports',600000,()=>researchCrawlerPool.get(
+   'https://www.espn.com/nfl/scoreboard'));
+}
+
 const reply=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'}});
 const safeNumber=(x)=>Number.isFinite(Number(x))?Number(x):null;
 const str=(x,max=300)=>String(x??'').trim().slice(0,max);
@@ -194,59 +202,12 @@ export async function sql(query,params=[],options={}){
   if(data?.message&&data?.severity==='ERROR')throw Error('Database query rejected');
   return Array.isArray(data.rows)?data.rows:[];
 }
-async function getBankroll(){
-  const rows=await sql("SELECT amount_cents::text AS cents,updated_at FROM kal_kings_bankroll WHERE venue='draftkings'");
-  return {amount:rows.length?Number(rows[0].cents)/100:null,updatedAt:rows[0]?.updated_at||null};
-}
-async function updateBankroll(amount){
-  const cents=Math.round(Number(amount)*100);
-  if(!Number.isSafeInteger(cents)||cents<0||cents>1e11)throw Error('Balance must be 0 to $1 billion');
-  const rows=await sql("INSERT INTO kal_kings_bankroll(venue,amount_cents,updated_at) VALUES ('draftkings',$1,now()) ON CONFLICT(venue) DO UPDATE SET amount_cents=EXCLUDED.amount_cents,updated_at=now() RETURNING amount_cents::text AS cents, updated_at",[String(cents)]);
-  return {amount:Number(rows[0].cents)/100,updatedAt:rows[0].updated_at};
-}
-async function getWagers(){
-  const rows=await sql("SELECT id,event_name,selection,odds_american,stake_cents::text AS stake_cents,payout_cents::text AS payout_cents,status,placed_at,settled_at FROM kal_kings_wagers ORDER BY placed_at DESC LIMIT 20");
-  return rows.map(row=>({id:row.id,event:row.event_name,selection:row.selection,odds:row.odds_american,
-    stake:Number(row.stake_cents)/100,payout:Number(row.payout_cents)/100,status:row.status,placedAt:row.placed_at,settledAt:row.settled_at}));
-}
-async function recordWager(data){
-  const stakeCents=Math.round(Number(data.stake)*100);const odds=Number(data.odds);
-  const event=str(data.event,160), selection=str(data.selection,100),id=randomUUID();
-  if(!event||!selection||!Number.isInteger(odds)||Math.abs(odds)<100||!Number.isSafeInteger(stakeCents)||stakeCents<1)throw Error('Invalid DraftKings wager');
-  const pairId=data.pairId==null||data.pairId===''?null:String(data.pairId);
-  if(pairId&&!/^[0-9a-f-]{36}$/i.test(pairId))throw Error('Invalid reviewed pair identifier');
-  if(pairId){const pair=await sql('SELECT id FROM kal_kings_pairs WHERE id=$1::uuid AND dk_selection=$2',[pairId,selection]);if(!pair.length)throw Error('Reviewed market pairing not found');}
-  const rows=await sql(`WITH debit AS (UPDATE kal_kings_bankroll SET amount_cents=amount_cents-$1::bigint,updated_at=now() WHERE venue='draftkings' AND amount_cents >= $1::bigint RETURNING amount_cents)
-    INSERT INTO kal_kings_wagers(id,venue,event_name,selection,odds_american,stake_cents,pair_id)
-    SELECT $2::uuid,'draftkings',$3,$4,$5::int,$1::bigint,$6::uuid FROM debit RETURNING id`,[String(stakeCents),id,event,selection,String(odds),pairId]);
-  if(!rows.length)throw Error('DraftKings balance insufficient or uninitialized');
-  return {id,stake:stakeCents/100,pairId,selection,event,odds};
-}
-async function settleWager({id,payout}){
-  const cents=Math.round(Number(payout)*100);
-  if(!/^[0-9a-f-]{36}$/i.test(String(id))||!Number.isSafeInteger(cents)||cents<0)throw Error('Invalid settlement');
-  const rows=await sql(`WITH settled AS (UPDATE kal_kings_wagers SET status='settled',payout_cents=$2::bigint,settled_at=now() WHERE id=$1::uuid AND status='open' RETURNING payout_cents), credit AS (UPDATE kal_kings_bankroll SET amount_cents=amount_cents+settled.payout_cents,updated_at=now() FROM settled WHERE venue='draftkings' RETURNING amount_cents) SELECT amount_cents::text AS cents FROM credit`,[id,String(cents)]);
-  if(!rows.length)throw Error('Wager not found, already settled, or bankroll missing');
-  return {amount:Number(rows[0].cents)/100};
-}
-async function savePair(data){
-  const ticker=str(data.kalshiTicker,128),eventId=str(data.dkEventId,128),selection=str(data.selection,128),side=str(data.side,8).toLowerCase(),digest=str(data.ruleDigest,128);
-  if(!/^[A-Z0-9_-]{4,128}$/i.test(ticker)||!eventId||!selection||!['yes','no'].includes(side)||!/^sha256:[0-9a-f]{64}$/i.test(digest))throw Error('Review requires exact event IDs and SHA-256 rules digest');
-  const id=randomUUID();
-  const rows=await sql('INSERT INTO kal_kings_pairs(id,kalshi_ticker,dk_event_id,dk_selection,kalshi_side,reviewed_rule_digest,reviewed_at) VALUES ($1::uuid,$2,$3,$4,$5,$6,now()) RETURNING id',[id,ticker,eventId,selection,side,digest]);
-  return {id:rows[0].id};
-}
 async function getPairs(){return await sql('SELECT id,kalshi_ticker,dk_event_id,dk_selection,kalshi_side,reviewed_rule_digest,reviewed_at FROM kal_kings_pairs ORDER BY reviewed_at DESC LIMIT 100');}
 async function getSoloOrders(){
  const rows=await sql('SELECT ticker,status,contracts,yes_price,no_price,net_profit_dollars,capital_reserved_dollars,yes_filled,no_filled,created_at,updated_at FROM kal_kings_solo_orders ORDER BY created_at DESC LIMIT 20');
  return rows.map(x=>({ticker:x.ticker,status:x.status,count:Number(x.contracts),yesPrice:Number(x.yes_price),noPrice:Number(x.no_price),
    projectedNet:Number(x.net_profit_dollars),capitalUsed:Number(x.capital_reserved_dollars),yesFilled:Number(x.yes_filled),noFilled:Number(x.no_filled),
    createdAt:x.created_at,updatedAt:x.updated_at}));
-}
-async function getAutoOrders(){
- const rows=await sql("SELECT wager_id,kalshi_ticker,status,count,limit_price,filled_count,created_at,updated_at FROM kal_kings_auto_orders ORDER BY created_at DESC LIMIT 12");
- return rows.map(x=>({wagerId:x.wager_id,ticker:x.kalshi_ticker,status:x.status,count:Number(x.count),
-  price:Number(x.limit_price),filled:Number(x.filled_count),createdAt:x.created_at,updatedAt:x.updated_at}));
 }
 async function freshKalshiMarket(ticker){
   const body=await external(`${KALSHI_PUBLIC}/trade-api/v2/markets/${encodeURIComponent(ticker)}`);
@@ -265,42 +226,6 @@ async function freshKalshiMarket(ticker){
     yesDepth:Number(m.yes_ask_size_fp??m.yes_ask_size??0),
     noDepth:Number(m.no_ask_size_fp??m.no_ask_size??0),observedAt:iso()};
 }
-async function automaticallyHedgeAcceptedDraftKingsTicket(ticket){
- if(!ticket.pairId)return {status:'NOT_APPLICABLE',note:'Unlinked DraftKings ticket was recorded; no Kalshi order.'};
- try{
-  const pairs=await getPairs();
-  const pair=pairs.find(x=>x.id===ticket.pairId);
-  if(!pair)return {status:'SKIPPED',reason:'REVIEWED_PAIR_NOT_FOUND'};
-  const [market,account]=await Promise.all([freshKalshiMarket(pair.kalshi_ticker),getKalshiAccount()]);
-  const plan=buildKalshiHedgePlan({ticket:{...ticket,pair_id:ticket.pairId,status:'open',userConfirmed:true},
-    mapping:pair,market,balance:account.balance,now:Date.now()});
-  if(!plan.accepted)return {status:'SKIPPED',reason:plan.reason};
-  const clientOrderId=randomUUID();
-  const inserted=await sql(`INSERT INTO kal_kings_auto_orders (client_order_id,wager_id,kalshi_ticker,status,count,limit_price)
-    VALUES ($1::uuid,$2::uuid,$3,'SUBMITTING',$4,$5) ON CONFLICT (wager_id) DO NOTHING RETURNING client_order_id`,
-    [clientOrderId,ticket.id,plan.ticker,String(plan.count),plan.price.toFixed(4)]);
-  if(!inserted.length)return {status:'ALREADY_ATTEMPTED',note:'The accepted wager has a previous Kalshi hedge attempt.'};
-  const path='/trade-api/v2/portfolio/events/orders';
-  const payload=kalshiV2Order({ticker:plan.ticker,count:plan.count,yesPrice:plan.price,clientOrderId});
-  let orderId=null,filledCount=0,resultStatus='UNKNOWN';
-  try{
-    const response=await fetch(KALSHI+path,{method:'POST',headers:{...kalshiHeaders(path,'POST'),
-      'content-type':'application/json'},body:JSON.stringify(payload),redirect:'error',signal:AbortSignal.timeout(9000)});
-    if(!response.ok)resultStatus='REJECTED';
-    else {
-      const responseData=await response.json();orderId=String(responseData.order_id||'').slice(0,128)||null;
-      filledCount=Number(responseData.fill_count);
-      if(!Number.isFinite(filledCount)||filledCount<0){filledCount=0;resultStatus='UNKNOWN';}
-      else resultStatus=filledCount>=plan.count?'FILLED':filledCount===0?'NOT_FILLED':'PARTIALLY_FILLED';
-    }
-  }catch{/* Network timeouts are ambiguous: never resubmit the same ticket automatically. */}
-  await sql(`UPDATE kal_kings_auto_orders SET status=$2,order_id=$3,filled_count=$4,updated_at=now()
-    WHERE client_order_id=$1::uuid`,[clientOrderId,resultStatus,orderId,String(filledCount)]);
-  return {status:resultStatus,filledCount,requestedContracts:plan.count,
-    note:resultStatus==='UNKNOWN'?'Order response uncertain; reconcile on Kalshi before further trading.':'Only exchange-confirmed fills count as executed.'};
- }catch{return {status:'UNAVAILABLE',note:'Execution or reconciliation could not be verified; no automatic retry.'};}
-}
-
 // Independent quantitative screening, backed by actual exchange order-book depth.
 // Historical snapshots are observations, never claims of executed trades.
 const kalshiSeriesFeeCache=new Map();
@@ -519,18 +444,17 @@ async function collectPredictiveStrategies(){
    });
  }).sort((a,b)=>b.possibleSettlementMargin-a.possibleSettlementMargin||
     Date.parse(a.market.closeTime)-Date.parse(b.market.closeTime));
- const rankedLate=rankStrategies(sports.filter(x=>x.lateGame?.direction&&x.sourceVerified&&
-   x.marketMatchVerified&&x.market&&Number.isFinite(Number(x.externalWinProbability))&&
-   x.externalWinProbability>=.70&&x.modelPlayId)
+ const rankedLate=sports.filter(x=>x.lateGame?.reason==='COMMANDING_LATE_LEAD'&&
+    x.marketMatchVerified===true&&x.market&&x.gameContext&&x.totalGame)
    .map(x=>{
-     const p=Number(x.externalWinProbability),ask=Number(x.market?.yesAsk);
-     const fee=Number.isFinite(ask)&&ask>0&&ask<1?
-       estimatedKalshiBuyDebit(1,ask)-ask:Infinity;
-     const edge=p-ask-fee;
-     return {...x,strategy:'LATE_GAME_LEAD',probability:p,
-       modeledLossFrequency:1-p,estimatedMaxDebitDollars:ask+fee,
-       expectedNetDollars:edge,allowed:Number.isFinite(edge)&&edge>1e-9};
-   }),{max:12});
+     const game=x.gameContext,tier=sportsLeadTier({sport:game.sport,period:game.period,
+       clockSeconds:game.clockSeconds,lead:x.lateGame.lead});
+     return {...x,strategy:'LATE_GAME_LEAD',game,sourceVerified:true,
+       lateGameVerified:true,maxAllocationFraction:tier.maxAllocationFraction,
+       allowed:tier.eligible};
+   }).filter(x=>x.allowed)
+   .sort((a,b)=>b.maxAllocationFraction-a.maxAllocationFraction||
+     a.game.clockSeconds-b.game.clockSeconds).slice(0,12);
  // Already-exceeded totals get FIRST re-price and fee verification.
  // Their preliminary quotes do not claim a guaranteed profit.
  const cryptoIdeas=rankCryptoCandidates(cryptos,{now,max:6});
@@ -575,10 +499,21 @@ async function fetchKalshiOrdersForTicker(ticker){
  }
  return orders;
 }
+async function cancelKalshiUnfilledRestingOrder(orderId){
+ if(typeof orderId!=='string'||!/^[a-zA-Z0-9_-]{3,128}$/.test(orderId))
+   throw Error('Invalid Kalshi order identifier');
+ const path='/trade-api/v2/portfolio/events/orders/'+encodeURIComponent(orderId);
+ const response=await fetch(KALSHI+path,{method:'DELETE',headers:kalshiHeaders(path,'DELETE'),
+   redirect:'error',signal:AbortSignal.timeout(8000)});
+ if(!response.ok)throw Error('Kalshi cancellation not confirmed');
+ const result=await response.json();
+ if(result?.order_id!==orderId)throw Error('Kalshi cancellation order mismatch');
+ return result;
+}
 const manualOrders=makeManualExecutor({sql,fetchAccount:getKalshiAccount,
   fetchMarket:freshKalshiMarket,fetchOrderbook:getKalshiOrderbook,
   fetchFeeSchedule:getVerifiedKalshiFeeSchedule,
-  fetchOrders:fetchKalshiOrdersForTicker,
+  fetchOrders:fetchKalshiOrdersForTicker,cancelOrder:cancelKalshiUnfilledRestingOrder,
   submit:submitSoloOrder,createId:randomUUID,now:Date.now});
 async function getManualOrders(){
  try{await memo('manual_reconcile',30000,()=>manualOrders.reconcilePending())}
@@ -754,46 +689,6 @@ async function getKalshiAccount(){
     observedAt:iso()};
 }
 
-export function evaluatedMatches(pairs,kalshi,draft,dkBalance,now=Date.now(),kalshiBalance=null){
-  const opportunities=[];
-  for(const pair of pairs){
-    const km=kalshi.find(m=>m.id===pair.kalshi_ticker),de=draft.find(m=>m.id===pair.dk_event_id);
-    const sel=de?.outcomes?.find(o=>o.selection===pair.dk_selection);
-    const side=pair.kalshi_side,ask=km?.[side==='yes'?'yesAsk':'noAsk'];
-    if(!sel||!validPrice(ask))continue;
-    const reviewedAge=now-Date.parse(pair.reviewed_at);
-    const withinReview=Number.isFinite(reviewedAge)&&reviewedAge>=0&&reviewedAge<604800000&&
-      /^sha256:[0-9a-f]{64}$/i.test(pair.reviewed_rule_digest||'');
-    const fresh=quoteAge(km,now)<=30000&&quoteAge(de,now)<=120000;
-    if(!withinReview||!fresh)continue;
-    const kb=kalshiBalance==null?0:Number(kalshiBalance),db=dkBalance==null?0:Number(dkBalance);
-    let decimal;try{decimal=americanToDecimal(sel.american);}catch{continue;}
-    const total=kb+db;
-    const funded=kb>0&&db>0;
-    const plan=funded?chooseHedge({kalshiAsk:ask,dkOdds:sel.american,kalshiBalance:kb,
-      dkBalance:db,availableDepth:km[side==='yes'?'yesDepth':'noDepth'],bankroll:total}):null;
-    // Quote-based analysis must work even before accounts are funded; it is NOT executable.
-    const maximum=Number(km[side==='yes'?'yesDepth':'noDepth']);
-    const count=plan?.kalshiContracts??(Number.isFinite(maximum)?Math.min(5,Math.floor(maximum)):0);
-    if(count<1)continue;
-    const stake=plan?.dkStakeDollars??cash(count/decimal);
-    const fee=plan?.kalshiFeeDollars??estimatedKalshiFee(count,ask);
-    const assessment=evaluatePair({contracts:count,kalshiAsk:ask,dkStake:stake,
-      dkAmerican:sel.american,feeUSD:fee,reviewed:true,sameResolution:true,dkAccepted:false},now);
-    const candidate={id:pair.id,event:de.event,selection:sel.selection,kalshiTicker:km.id,
-      kalshiSide:side,kalshiAsk:ask,dkAmerican:sel.american,...assessment,
-      fresh:true,reviewed:true,sameResolution:true,
-      funded:Boolean(plan)&&kb>=plan.kalshiCostDollars&&db>=plan.dkStakeDollars,
-      quoteUpdatedAt:de.updatedAt,requiresDraftKingsAction:true,
-      modeledRiskLimit:total>0?riskPolicy(total).hardLossLimitDollars:0,
-      comparisonOnly:false,
-      disclaimer:'Conditional quoted spread only; neither leg has been executed. Settlement and fee review remain essential.'};
-    if(candidate.minimumProfit<=0)continue;
-    candidate.monteCarlo=monteCarlo(assessment,{trials:1500,winProbability:.5,secondLegFillProbability:.85});
-    opportunities.push(candidate);
-  }
-  return opportunities.sort((a,b)=>b.minimumProfit-a.minimumProfit).slice(0,10);
-}
 async function diagnostics(){
  const probes=await Promise.allSettled([
    sql('SELECT 1 AS health'),
@@ -813,12 +708,12 @@ async function diagnostics(){
   checkedAt:iso()};
 }
 async function state(){
-  const [kr,pr,dr,ar,br,wr,pairsr,cr,polyAuth,tvAlerts,tvTrends,tvReady,autoHistory,soloHistory,watches,settledPositions,quantReport]=await Promise.allSettled([
+  const [kr,pr,dr,ar,settlementsR,pairsr,cr,polyAuth,tvAlerts,tvTrends,tvReady,soloHistory,watches,settledPositions,quantReport]=await Promise.allSettled([
     memo('kalshi',TTL.kalshi,publicKalshi),
     memo('polymarket',TTL.polymarket,publicPolymarket),
     memo('draftkings',TTL.draftkings,currentDraftKingsOdds),
-    memo('account',TTL.account,getKalshiAccount),getBankroll(),getWagers(),getPairs(),
-    memo('crypto',TTL.crypto,cryptoSpot),memo('polyaccount',TTL.polyaccount,polyAccountCheck),getTradingViewAlerts(),memo('trends',TTL.trends,cryptoTrends),tradingViewEnabled(),getAutoOrders(),getSoloOrders(),getPositionWatches(),getBotSettlements(),getQuantDiagnostics()
+    memo('account',TTL.account,getKalshiAccount),memo('settlements',5000,fetchKalshiSettlements),getPairs(),
+    memo('crypto',TTL.crypto,cryptoSpot),memo('polyaccount',TTL.polyaccount,polyAccountCheck),getTradingViewAlerts(),memo('trends',TTL.trends,cryptoTrends),tradingViewEnabled(),getSoloOrders(),getPositionWatches(),getBotSettlements(),getQuantDiagnostics()
   ]);
   const value=(r,fallback)=>r.status==='fulfilled'?r.value:fallback;
   const [predictive,strategyPerformance,directionalOrders,marketUniverse,scannerStatus,cryptoCycleStatus,manualOrderHistory]=await Promise.all([
@@ -828,26 +723,22 @@ async function state(){
     getManualOrders().catch(()=>[])]);
   const k=value(kr,[]),p=value(pr,[]),d=value(dr,{events:[],issues:['Odds provider unavailable']});
   const account=value(ar,{status:'UNAVAILABLE',balance:null,holdings:[]});
-  const bankroll=value(br,{amount:null,updatedAt:null});
-  const reviewedPairs=value(pairsr,[]);
-  const opportunities=evaluatedMatches(reviewedPairs,k,d.events,bankroll.amount,Date.now(),account.balance);
-  const favorites=favoriteWatchlist(d.events);
+    const reviewedPairs=value(pairsr,[]);
+    const favorites=favoriteWatchlist(d.events);
   const priceGaps=discoverQuotedGaps(k,d.events,p,iso());
   const sportsTop={kalshi:topSports(k,10),draftkings:d.events.slice(0,10),polymarket:topSports(p,10)};
   const signals=directionalCandidates(reviewedPairs,k,d.events,account.balance);
   const allocationPolicy=account.balance!=null?riskPolicy(account.balance):null;
-  const tradeBoard=buildTradeBoard({opportunities,signals,priceGaps,favorites});
-  const ordersHistory=value(autoHistory,[]);
-  const tradeReadiness=bankrollTradeStatus({balance:account.balance,opportunities,riskPolicy:allocationPolicy});
-  const soloIdeas=account.balance==null?[]:findKalshiSoloCandidates(k,{balance:account.balance,now:Date.now()});
+        const soloIdeas=account.balance==null?[]:findKalshiSoloCandidates(k,{balance:account.balance,now:Date.now()});
   const soloOrders=value(soloHistory,[]);
+  const settlementBoard=settlementDashboardState({account,settlements:value(settlementsR,null),asOf:iso()});
   const alerts=value(tvAlerts,[]),trends=value(tvTrends,[]);
   const enrichedCrypto=mergeCryptoAlerts(value(cr,[]),alerts).map(row=>({...row,
     technical:trends.find(t=>t.symbol===row.symbol)||null}));
   const feedDiagnostics={
     kalshiQuoteCount:k.length,polymarketQuoteCount:p.length,draftKingsQuoteCount:d.events.length,
     cryptoQuoteCount:value(cr,[]).length,reviewedPairCount:reviewedPairs.length,
-    exploratoryGapCount:priceGaps.length,verifiedOpportunityCount:opportunities.length,
+    exploratoryGapCount:priceGaps.length,
     draftKingsConnected:dr.status==='fulfilled'&&d.events.length>0,
     draftKingsFeedType:await getOddsKey()?'The Odds API':'SharpAPI odds relay',
     explanation:dr.status!=='fulfilled'||d.events.length===0?'DraftKings odds relay returned no eligible prices; see provider diagnostics.':
@@ -859,32 +750,31 @@ async function state(){
    providers:{kalshi:{...cachedStatus('kalshi'),count:k.length,ready:kr.status==='fulfilled'},
     polymarket:{...cachedStatus('polymarket'),count:p.length,ready:pr.status==='fulfilled'&&p.length>0},
     draftkings:{...cachedStatus('draftkings'),count:d.events.length,ready:dr.status==='fulfilled'&&d.events.length>0,configured:feedDiagnostics.draftKingsConnected,issues:d.issues||[]}},
-   balances:{kalshi:account.balance,draftkings:bankroll.amount,polymarket:null,updatedAt:bankroll.updatedAt},
+   balances:{kalshi:account.balance,updatedAt:account.observedAt||null},settlementBoard,
    holdings:account.holdings,kalshiStatus:account.status,polymarketStatus:value(polyAuth,{status:'UNAVAILABLE'}).status,crypto:enrichedCrypto,
    tradingView:{configured:value(tvReady,false),alertsReceived:alerts.length,alerts,source:'TradingView configured webhooks; spot indicators computed from Coinbase'},
    quantitativeAnalysis:value(quantReport,{confidence:'DATA_UNAVAILABLE',verifiedExpectedProfit:null,recent:[]}),
    predictiveStrategies:predictive,strategyPerformance,directionalOrders,marketUniverse,scannerStatus,cryptoCycleStatus,manualOrderHistory,
-   config:{...requiredEnv(),oddsFeedConfigured:true,neonStorageReady:br.status==='fulfilled'},
+   researchSources:researchCrawlerPool.status(),
+   config:{...requiredEnv(),oddsFeedConfigured:true,neonStorageReady:pairsr.status==='fulfilled'},
    quotes:{kalshi:k,polymarket:p,draftkings:d.events},
-   opportunities,priceGaps,favorites,sportsSignals:signals,riskPolicy:allocationPolicy,wagers:value(wr,[]),
-   automatedOrders:ordersHistory,automatedExecutionSummary:executionSummary(ordersHistory),
-   kalshiSolo:{strategy:'Independent same-market complementary YES/NO quotes',scheduler:'Neon minute fallback plus authenticated five-second dashboard scans',
+   priceGaps,favorites,sportsSignals:signals,riskPolicy:allocationPolicy,
+      kalshiSolo:{strategy:'Independent same-market complementary YES/NO quotes',scheduler:'Neon minute fallback plus authenticated five-second dashboard scans',
     opportunities:soloIdeas,orders:soloOrders,summary:summarizeSoloOrders(soloOrders),
     funded:account.balance!=null&&account.balance>0,autoWithoutDraftKings:true,
     cashReadyForReinvestment:cashAvailableForReinvestment(account).available,
     monitoredExits:value(watches,[]),settlements:value(settledPositions,[]),
     exitMethod:'Verified bot-owned position / observed-bid Monte Carlo plus stop/trailing exit / reduce-only IOC',
     entryMethod:'Exchange orderbook depth and fees / simulation-conditioned execution / correlated portfolio risk',
-    note:'No DraftKings ticket is required. Both Kalshi legs must execute; one-sided fills remain exposed.'},
-   tradeBoard,tradeReadiness,
-   topSports:sportsTop,agent:activeAgent(),
-   trading:{funded:tradeReadiness.funded,tradeReady:tradeReadiness.tradeReady,automaticOrdersEnabled:true,mode:'INDEPENDENT_KALSHI_SOLO_PLUS_SEPARATE_DRAFTKINGS_ARBITRAGE',draftKingsAutomaticOrdersEnabled:false,backgroundWorkerActive:true},
+    note:'Both Kalshi legs must execute; one-sided fills remain exposed.'},
+      topSports:sportsTop,agent:activeAgent(),
+   trading:{funded:account.status==='VERIFIED'&&account.balance>0,tradeReady:soloIdeas.length>0,automaticOrdersEnabled:true,mode:'KALSHI_ONLY',draftKingsAutomaticOrdersEnabled:false,backgroundWorkerActive:true},
    notes:['Provider quote timestamps determine freshness, not page refresh frequency.',
     'Polymarket US is reference-only with no funded positions.',
     'Favorites shown as market-implied confidence, not verified positive-EV wagers.',
     'Risk scales with available bankroll; an exceptionally small account can be considered for a single affordable contract, but only on independently verified profitable terms.',
     'DraftKings via SharpAPI is market data only; no sportsbook wagering API is available.',
-    'No cross-venue spread is risk-free until identical settlement rules and both fills are verified.'],
+    'DraftKings odds are background research only; no paired betting is enabled.'],
   };
 }
 export default {
@@ -911,7 +801,18 @@ export default {
       }catch{return error(400,'Invalid trigger payload');}
       if(!isNeonSoloTrigger({'x-neon-trigger-invocation-id':request.headers.get('x-neon-trigger-invocation-id')},body))
         return error(403,'Not an authorized Neon schedule trigger');
-      try{const sports=await runSolo({invocationId:body.invocation_id,scheduledAt:body.data.scheduled_at}); const crypto=await runCryptoCycle('schedule').catch(()=>({status:'UNAVAILABLE'})); return reply({...sports,crypto});}
+      try{const sports=await runSolo({invocationId:body.invocation_id,scheduledAt:body.data.scheduled_at});
+          const crypto=await runCryptoCycle('schedule').catch(()=>({status:'UNAVAILABLE'}));
+          // A public-page crawler sweep runs occasionally AFTER trade checks.
+          // Timeouts never block the independent sports/crypto engines.
+          if(new Date().getUTCMinutes()%15===0)
+             await Promise.race([supplementalSportsResearch().catch(()=>null),
+               new Promise(resolve=>setTimeout(resolve,1250))]);
+          const reconciliation=await Promise.race([
+            manualOrders.reconcilePending().catch(()=>({status:'UNAVAILABLE'})),
+            new Promise(resolve=>setTimeout(()=>resolve({status:'DEFERRED'}),3500))
+          ]);
+          return reply({...sports,crypto,reconciliation});}
       catch{return error(503,'Kalshi automation unavailable');}
     }
     if(path==='/webhooks/tradingview'){
@@ -939,41 +840,31 @@ export default {
           getManualOrders().catch(()=>[])]);
         return reply({cryptoCycleStatus,scannerStatus,manualOrderHistory,asOf:iso()});
       }
+      if(request.method==='POST'&&path==='/api/research/refresh'){
+        try{const report=await supplementalSportsResearch();
+          return reply({provider:report.provider,observedAt:report.observedAt,characters:report.content.length,
+            status:'RESEARCH_ONLY',sources:researchCrawlerPool.status()});}
+        catch{return reply({status:'UNAVAILABLE',sources:researchCrawlerPool.status()},503);}
+      }
       if(request.method==='GET'&&path==='/api/tradingview/alerts')return reply({alerts:await getTradingViewAlerts(),configured:await tradingViewEnabled()});
       if(request.method==='POST'&&path==='/api/tradingview/config')return reply(await setTradingViewSecret((await request.json()).passphrase));
-      if(request.method==='GET'&&path==='/api/wagers')return reply({wagers:await getWagers()});
-      if(request.method==='GET'&&path==='/api/automation/history')return reply({orders:await getAutoOrders()});
-      if(request.method==='GET'&&path==='/api/kalshi/solo')return reply({orders:await getSoloOrders(),watches:await getPositionWatches(),settlements:await getBotSettlements()});
+                  if(request.method==='GET'&&path==='/api/kalshi/solo')return reply({orders:await getSoloOrders(),watches:await getPositionWatches(),settlements:await getBotSettlements()});
       if(request.method==='POST'&&path==='/api/kalshi/crypto-cycle')
         return reply(await runCryptoCycle('dashboard'));
       if(request.method==='GET'&&path==='/api/kalshi/manual/orders')return reply({orders:await getManualOrders()});
+      if(request.method==='POST'&&path==='/api/kalshi/reconcile')
+        return reply(await manualOrders.reconcilePending());
       if(request.method==='POST'&&path==='/api/kalshi/manual/preview')
         return reply(await manualOrders.preview(await request.json()));
       if(request.method==='POST'&&path==='/api/kalshi/manual/execute')
         return reply(await manualOrders.execute(await request.json()));
       if(request.method==='GET'&&path==='/api/kalshi/micro-test')return reply({test:await getOneTimeLiveTest()});
       if(request.method==='POST'&&path==='/api/kalshi/micro-test')return reply(await runOneTimeLiveTest(await request.json()));
-      if(request.method==='GET'&&path==='/api/pairs')return reply({pairs:await getPairs()});
-      if(request.method==='POST'&&path==='/api/dk/balance'){
-        const body=await request.json();return reply(await updateBankroll(body.amount));
-      }
-      if(request.method==='POST'&&path==='/api/dk/wager'){
-        const created=await recordWager(await request.json());
-        const hedge=await automaticallyHedgeAcceptedDraftKingsTicket(created);
-        return reply({created,kalshiAutomation:hedge});
-      }
-      if(request.method==='POST'&&path==='/api/dk/settle')return reply({balance:await settleWager(await request.json())});
-      if(request.method==='POST'&&path==='/api/settings/odds-api'){
+            if(request.method==='POST'&&path==='/api/settings/odds-api'){
         const body=await request.json(); const key=str(body.key,128);
         if(key.length<8) return error(400,'Invalid odds API key');
         await saveSetting('odds_api_key',encryptSecret(key));cache.delete('draftkings');
         return reply({saved:true});
-      }
-      if(request.method==='POST'&&path==='/api/pairs')return reply({created:await savePair(await request.json())});
-      if(request.method==='POST'&&path==='/api/simulate'){
-        const body=await request.json();
-        const pair=evaluatePair(body);
-        return reply({pair,simulation:monteCarlo(pair,{trials:5000,winProbability:Number(body.winProbability??.5),secondLegFillProbability:Number(body.fillProbability??.85)})});
       }
       return error(404,'Route not found');
     }catch(e){

@@ -5,7 +5,9 @@ const now=Date.parse('2026-10-26T12:00:00Z');
 const ticker='KXNFLGAME-26OCT26DALPHI-PHI';
 const idea={id:'1',eventKey:'NFL:2026-10-26:DAL:PHI',strategy:'LATE_GAME_LEAD',
  market:{ticker,status:'active',yesAsk:.7,yesDepth:12,observedAt:new Date(now).toISOString(),closeTime:new Date(now+180000).toISOString()},
- probability:.91,sourceVerified:true,marketMatchVerified:true,modelPlayId:'p56',updatedAt:new Date(now).toISOString()};
+ probability:.91,sourceVerified:true,marketMatchVerified:true,lateGameVerified:true,
+ game:{sport:'NFL',period:4,clockSeconds:60,homeScore:38,awayScore:16},
+ updatedAt:new Date(now).toISOString()};
 const book={orderbook_fp:{yes_dollars:[['0.6900','12.00']],no_dollars:[['0.3000','12.00']]}};
 function fixture(override={}){
  let orders=[],rows=new Map(),requests=0;
@@ -31,7 +33,7 @@ test('independently verified positive-value live leader may submit one bounded o
 });
 test('unverified, stale, expensive, and unfunded plans never send orders',async()=>{
  const cases=[{...idea,sourceVerified:false},{...idea,updatedAt:new Date(now-30000).toISOString()},
- {...idea,probability:.60}];
+ {...idea,game:{...idea.game,homeScore:17,awayScore:16}}];
  for(const x of cases){const f=fixture();const r=await f.runner({ideas:[x],account:{balance:15,holdings:[],positionsComplete:true,status:'VERIFIED'}});assert.equal(f.orders.length,0);}
  const f=fixture();await f.runner({ideas:[idea],account:{balance:0,holdings:[],positionsComplete:true,status:'VERIFIED'}});
  assert.equal(f.orders.length,0);
@@ -90,9 +92,10 @@ test('verified three-unit ninety-nine-cent total captures tiny positive aggregat
  const out=await f.runner({ideas:[totalIdea],
    account:{balance:15,holdings:[],positionsComplete:true,status:'VERIFIED'}});
  assert.equal(out.status,'FILLED');
- assert.equal(out.contracts,3);
+ assert.ok(out.contracts>=3);
  assert.ok(out.expectedNetDollars>0);
- assert.equal(f.orders[0].count,'3.00');
+ assert.ok(out.estimatedMaxDebitDollars<=12.01);
+ assert.equal(f.orders[0].count,Number(out.contracts).toFixed(2));
 });
 test('unknown Kalshi series fee structure cannot approve tiny apparent margin',async()=>{
  const f=fixture({fetchFeeSchedule:async()=>({feeType:'flat',feeMultiplier:null})});
@@ -107,7 +110,7 @@ test('a confirmed zero-fill on one market immediately tries another independentl
  let submissions=0;
  const f=fixture({submit:async order=>{
    f.orders.push(order);submissions++;
-   return {order_id:'receipt-'+submissions,fill_count:submissions===1?'0.00':'1.00'};
+   return {order_id:'receipt-'+submissions,fill_count:submissions===1?'0.00':order.count};
  }});
  const out=await f.runner({ideas:[idea,second],
    account:{status:'VERIFIED',balance:15,holdings:[],positionsComplete:true}});
@@ -177,10 +180,10 @@ test('confirmed zero-fill can be retried on a fresh quote after cooldown, never 
  assert.notEqual(f.orders[0].client_order_id,f.orders[1].client_order_id);
 });
 
-test('70 to 85 percent forecast may auto-buy commanding late leader when net price edge is positive',async()=>{
+test('late-game leader qualifies by lead and clock even without 70 percent forecast',async()=>{
  const f=fixture({fetchOrderbook:async()=>({orderbook_fp:{
    yes_dollars:[['0.4000','12.00']],no_dollars:[['0.5500','12.00']]}})});
- const outcome=await f.runner({ideas:[{...idea,probability:.78}],
+ const outcome=await f.runner({ideas:[{...idea,probability:.30}],
    account:{status:'VERIFIED',balance:15,holdings:[],positionsComplete:true}});
  assert.equal(outcome.status,'FILLED');
  assert.equal(f.orders.length,1);

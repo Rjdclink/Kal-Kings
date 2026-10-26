@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {selectCryptoIdea,rankCryptoCandidates} from './crypto_candidate.mjs';
+import {selectCryptoIdea,rankCryptoCandidates,cryptoConfidenceScore} from './crypto_candidate.mjs';
 test('missing research cannot qualify',()=>assert.equal(selectCryptoIdea(null),null));
 
 const now=Date.parse('2026-10-26T14:00:00Z'),ticker='KXBTC15M-26OCT261415-15';
@@ -23,8 +23,10 @@ test('a positive-value 76 percent modeled-win forecast may enter final price val
  const c=selectCryptoIdea({...signal,modeledWinProbability:.76},{now});
  assert.equal(c?.side,'no');assert.equal(c?.probability,.76);
 });
-test('model probability below 70 percent does not qualify under broadened forecast cap',()=>{
- assert.equal(selectCryptoIdea({...signal,modeledWinProbability:.69},{now}),null);
+test('raw probability below 70 percent may qualify after consensus scoring, but remains the true model estimate',()=>{
+ const c=selectCryptoIdea({...signal,modeledWinProbability:.69},{now});
+ assert.equal(c.confidenceScorePercent,89);
+ assert.equal(c.probability,.69);
 });
 
 test('no Kalshi official reference price means no executable crypto opportunity',()=>{
@@ -39,4 +41,14 @@ test('unanimous seven-venue agreement receives priority ahead of otherwise eligi
  assert.equal(ranked.length,2);
  assert.equal(ranked[0].symbol,'ETH');
  assert.equal(ranked[0].allocationFraction,.4);
+});
+
+test('consensus adds 10,15,20,30 confidence points while four remains monitor-only',()=>{
+ for(const [votes,boost] of [[4,10],[5,15],[6,20],[7,30]]){
+  const x=cryptoConfidenceScore(.55,votes);
+  assert.equal(x.bonusPoints,boost);assert.equal(x.scorePercent,55+boost);
+  const idea=selectCryptoIdea({...signal,agreeingSources:votes,modeledWinProbability:.55},{now});
+  assert.equal(Boolean(idea),votes>=5&&(55+boost)>=70);
+  if(idea)assert.equal(idea.probability,.55);
+ }
 });

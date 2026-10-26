@@ -7,6 +7,8 @@ import {estimatedKalshiBuyDebit} from './engine.mjs';
 import {normalizeKalshiBook} from './quant.mjs';
 import {assessKalshiValue} from './strategy_optimizer.mjs';
 import {assessAlreadyExceededTotal} from './total_strategy.mjs';
+import {planLateGameOrder} from './sports_allocation.mjs';
+import {cryptoConfidenceScore} from './crypto_candidate.mjs';
 const validTicker=t=>/^[A-Z0-9_-]{4,128}$/.test(t||'');
 const age=(v,now)=>now-Date.parse(v||'');
 export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSchedule,
@@ -26,7 +28,7 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
    const isCrypto=idea?.strategy==='CRYPTO_DIRECTIONAL_CONSENSUS';
    if(!['LATE_GAME_LEAD','TOTAL_ALREADY_OVER','CRYPTO_DIRECTIONAL_CONSENSUS'].includes(idea?.strategy)||
       idea.sourceVerified!==true||idea.marketMatchVerified!==true||!validTicker(ticker)||
-      (!isTotal&&!isCrypto&&(!idea.modelPlayId||typeof idea.modelPlayId!=='string'))||
+      (!isTotal&&!isCrypto&&idea.lateGameVerified!==true)||
       !Number.isFinite(age(idea.updatedAt,clock))||age(idea.updatedAt,clock)<0||
       age(idea.updatedAt,clock)>(isCrypto?30_000:10_000))continue;
    let finalConsensus=null;
@@ -79,17 +81,24 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
      yesAsk:book.yesAsks?.[0]?.price,noAsk:book.noAsks?.[0]?.price,
      yesDepth:book.yesAsks?.[0]?.quantity,noDepth:book.noAsks?.[0]?.quantity,
      observedAt:fresh.observedAt};
+   const finalScore=isCrypto?cryptoConfidenceScore(idea.probability,
+     Math.min(Number(idea.agreeingSources),Number(finalConsensus?.agreeingSources))):null;
+   if(isCrypto&&!finalScore?.tradeEligible){reason='FINAL_CONSENSUS_CONFIDENCE_BELOW_MINIMUM';continue;}
    const decision=isTotal?assessAlreadyExceededTotal({
        game:idea.game,market:quote,bankroll:Number(account.balance),
        feePerContract:fee,feeMultiplier,holdings:account.holdings,
        holdingsComplete:account.positionsComplete,now:now()
-     }):assessKalshiValue({market:quote,side:isCrypto?idea.side:'yes',
-       probability:idea.externalWinProbability??idea.probability,
+     }):!isCrypto?planLateGameOrder({game:idea.game,market:quote,
+       bankroll:Number(account.balance),feePerContract:fee,
+       holdings:account.holdings,now:now()
+     }):assessKalshiValue({market:quote,side:idea.side,
+       probability:idea.probability,
        probabilitySource:isCrypto?'CRYPTO_SCENARIO_PROXY':'ESPN_LIVE_MODEL',sourceVerified:true,marketMatchVerified:true,
        bankroll:Number(account.balance),holdings:account.holdings,
        feePerContract:fee,now:now(),maxLossProbability:.30,
        minimumEdge:isCrypto?.02:0,
-       maxBankrollFraction:isCrypto?Math.min(Number(idea.allocationFraction),Number(finalConsensus.allocationFraction)):null});
+       maxBankrollFraction:isCrypto?Math.min(Number(idea.allocationFraction),Number(finalConsensus.allocationFraction)):null,
+       consensusConfidenceScorePercent:finalScore?.scorePercent??null});
    if(!decision.allowed){reason=decision.reason;continue;}
    // Each strategy's order planner already enforces its own bankroll cap.
    // A second unrelated 2% check would falsely veto profitable total orders.

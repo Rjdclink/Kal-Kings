@@ -12,7 +12,7 @@ const market={ticker:'KXNFLTOTAL-26OCT26DALPHI-44',status:'active',
 test('verified score past official total allows a positive one-sided market opportunity',()=>{
  const v=assessAlreadyExceededTotal({game,market,bankroll:15,feePerContract:.02,now});
  assert.equal(v.allowed,true);assert.equal(v.strategy,'TOTAL_ALREADY_OVER');
- assert.equal(v.side,'yes');assert.equal(v.contracts,4);
+ assert.equal(v.side,'yes');assert.ok(v.contracts>=10);assert.ok(v.estimatedMaxDebitDollars<=15*.8+1e-8);
  assert.ok(v.netIfNormallySettledDollars>0);
 });
 test('a high displayed probability alone is not a clinched total',()=>{
@@ -41,7 +41,7 @@ test('one cent after fees is positive value, with multiple affordable units',()=
  const q={...market,yesAsk:.98,yesDepth:12};
  const d=assessAlreadyExceededTotal({game,market:q,bankroll:15,feePerContract:.01,now});
  assert.equal(d.allowed,true);
- assert.equal(d.contracts,3);
+ assert.ok(d.contracts>=10);assert.ok(d.estimatedMaxDebitDollars<=15*.8+1e-8);
  assert.ok(d.netIfNormallySettledDollars>=.03-1e-7);
 });
 test('a fraction of a cent is accepted only when truly net positive after the verified fee',()=>{
@@ -62,6 +62,6 @@ test('batched 99-cent totals may be positive after actual aggregated fee roundin
  const x=assessAlreadyExceededTotal({game,market:{...market,yesAsk:.99},
    bankroll:15,feePerContract:0.01,feeMultiplier:1,now});
  assert.equal(x.allowed,true);
- assert.equal(x.contracts,3);
+ assert.ok(x.contracts>=10);assert.ok(x.estimatedMaxDebitDollars<=15*.8+1e-8);
  assert.ok(x.netIfNormallySettledDollars>0);
 });

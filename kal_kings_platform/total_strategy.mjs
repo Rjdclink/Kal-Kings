@@ -1,5 +1,6 @@
 /** Verified irreversible game-total screen; no outcome probabilities are invented. */
 import {estimatedKalshiBuyDebit} from './engine.mjs';
+import {monteCarloOverAllocation} from './sports_allocation.mjs';
 const number=v=>v===null||v===undefined||v===''?NaN:Number(v);
 const finite=Number.isFinite;
 const denied=(reason,extra={})=>({allowed:false,strategy:'TOTAL_ALREADY_OVER',reason,...extra});
@@ -50,8 +51,9 @@ export function assessAlreadyExceededTotal({
  const verifiedFee=feeMultiplier!==null;
  if(verifiedFee&&(!finite(number(feeMultiplier))||number(feeMultiplier)<0||
    number(feeMultiplier)>4))return denied('SERIES_FEE_NOT_VERIFIED');
- const budget=cash<100?Math.min(cash,cash*.25):Math.min(cash,cash*.02);
- const maxCount=Math.min(50,Math.floor(depth),Math.floor(budget/ask));
+ const sizing=monteCarloOverAllocation({bankroll:cash,price:ask,depth,seed:113});
+ const budget=Math.min(cash,cash*sizing.allocationFraction);
+ const maxCount=Math.min(5000,Math.floor(depth),Math.floor(budget/ask));
  let best=null;
  for(let n=1;n<=maxCount;n++){
    const debit=verifiedFee?
@@ -73,6 +75,7 @@ export function assessAlreadyExceededTotal({
   netIfNormallySettledDollars:Math.round(best.net*10000)/10000,
   estimatedMaxDebitDollars:Math.round(best.debit*10000)/10000,
   modeledWinProbability:null,modeledLossFrequency:null,conditionalPayoutDollars:count,
+  bankrollAllocationFraction:sizing.allocationFraction,allocationMonteCarloTrials:sizing.trials,
   score,totalLine:line,eventKey:series+'-'+dateCode+a+h,
   note:'Score is already above the official threshold; corrections, voids, delays, and execution fees remain possible.'};
 }

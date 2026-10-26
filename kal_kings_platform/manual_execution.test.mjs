@@ -116,3 +116,37 @@ test('a disclosed one-cent limit cushion accommodates normal live quote movement
  assert.equal(receipt.status,'FILLED');
  assert.equal(f.orders[0].price,'0.4800');
 });
+
+test('resting unfilled manual order is canceled and recorded unfilled only after confirmed Kalshi cancellation',async()=>{
+ const f=setup({fetchOrders:async ticker=>[]});
+ const preview=await f.executor.preview({ticker:market.id,side:'no',count:1});
+ const intent=f.intents.get(preview.intentId);intent.status='UNCERTAIN';
+ let canceled=0;
+ const report=await f.executor.reconcilePending({
+   readOrderHistory:async ticker=>[{ticker,client_order_id:intent.client_order_id,order_id:'kal-order-1',
+      fill_count_fp:'0.00',status:canceled?'canceled':'resting'}],
+   cancelUnfilledOrder:async orderId=>{assert.equal(orderId,'kal-order-1');canceled++;return {order_id:orderId,reduced_by:'1.00'};}
+ });
+ assert.equal(canceled,1);
+ assert.equal(report.confirmed,1);
+ assert.equal(f.intents.get(preview.intentId).status,'NOT_FILLED');
+});
+test('uncertain order absent from incomplete history remains uncertain rather than falsely canceled',async()=>{
+ const f=setup();
+ const preview=await f.executor.preview({ticker:market.id,side:'yes',count:1});
+ f.intents.get(preview.intentId).status='UNCERTAIN';
+ const report=await f.executor.reconcilePending({readOrderHistory:async()=>[]});
+ assert.equal(report.confirmed,0);
+ assert.equal(f.intents.get(preview.intentId).status,'UNCERTAIN');
+});
+test('resting order with a confirmed partial fill cannot be marked NOT_FILLED after cancellation',async()=>{
+ const f=setup();const preview=await f.executor.preview({ticker:market.id,side:'no',count:1});
+ const intent=f.intents.get(preview.intentId);intent.status='UNCERTAIN';
+ let canceled=false;
+ const report=await f.executor.reconcilePending({
+ readOrderHistory:async ticker=>[{ticker,client_order_id:intent.client_order_id,order_id:'kal-order-2',
+ fill_count_fp:'0.50',status:canceled?'canceled':'resting'}],
+ cancelUnfilledOrder:async()=>{canceled=true;return {order_id:'kal-order-2',reduced_by:'0.50'};}});
+ assert.equal(report.confirmed,1);
+ assert.equal(f.intents.get(preview.intentId).status,'PARTIALLY_FILLED');
+});
