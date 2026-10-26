@@ -5,7 +5,7 @@
 import {riskPolicy,adaptiveCapitalLimit} from './strategy.mjs';
 import {normalizeKalshiBook,optimizePairedDepth,evaluateRiskAdjustedEntry,portfolioExposureGate,
   snapshotBacktest,executionFillCalibration} from './quant.mjs';
-export const MAX_MODELED_LOSS_FREQUENCY=.15;
+export const MAX_MODELED_LOSS_FREQUENCY=.30;
 const finite=n=>typeof n==='number'&&Number.isFinite(n);
 const safeAge=(timestamp,now)=>now-Date.parse(timestamp||'');
 const rejected=(reason,other={})=>({accepted:false,reason,...other});
