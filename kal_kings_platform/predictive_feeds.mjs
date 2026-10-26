@@ -3,7 +3,7 @@ import {cryptoConsensus,planDirectionalTrade,assessLateGame,assessTotals} from '
 const KALSHI='https://external-api.kalshi.com/trade-api/v2';
 const ESPN='https://site.api.espn.com/apis/site/v2/sports';
 const integer=n=>Number.isFinite(Number(n))?Number(n):null;
-const timeout=()=>AbortSignal.timeout(7000);
+const timeout=()=>typeof AbortSignal==='undefined'?undefined:AbortSignal.timeout(7000);
 async function json(fetcher,url){
  const r=await fetcher(url,{method:'GET',signal:timeout(),redirect:'error'});
  if(!r?.ok)throw Error('Data provider unavailable');
