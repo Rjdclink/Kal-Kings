@@ -8,7 +8,7 @@ test('verified live-game forecast is recorded once with actual market ask',async
  assert.equal(eligibleForecast(data),true);
  await recordForecasts(sql,[data,{...data,sourceVerified:false}]);
  assert.equal(rows.length,1);
- assert.equal(rows[0].p[2],'.9');
+ assert.equal(rows[0].p[2],'0.9');
 });
 test('only venue-verified settled results receive an outcome label',async()=>{
  const calls=[];const sql=async(q,p)=>{calls.push({q,p});return q.includes('SELECT market_ticker')?[{market_ticker:data.market.ticker}]:[]};
