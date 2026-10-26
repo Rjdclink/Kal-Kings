@@ -2,6 +2,7 @@
  * Previews never submit. Intents are claimed atomically before Kalshi POST.
  */
 import {planManualKalshiBuy,buildManualBuyOrder} from './manual_trading.mjs';
+import {estimatedKalshiBuyDebit} from './engine.mjs';
 const tickerOk=t=>typeof t==='string'&&/^[A-Z0-9_-]{4,128}$/.test(t);
 const uuidOk=id=>typeof id==='string'&&/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(id);
 export function classifyKalshiManualError(err){
@@ -32,6 +33,20 @@ export function makeManualExecutor({sql,fetchAccount,fetchMarket,fetchOrderbook,
    try{plan=await livePlan({ticker,side,count})}
    catch{return {allowed:false,reason:'LIVE_QUOTE_UNAVAILABLE'}}
    if(!plan?.allowed)return plan;
+   // The user explicitly confirms the maximum price shown in preview,
+   // allowing a one-cent cushion for ordinary live book movement.
+   const currentBestAsk=plan.limitPrice;
+   const limit=Math.min(.9999,Math.round((currentBestAsk+.01)*10000)/10000);
+   if(limit>currentBestAsk){
+     const total=estimatedKalshiBuyDebit(count,limit,{feeMultiplier:plan.feeMultiplier});
+     if(total<=Number(plan.maximumRiskBudgetDollars)+1e-8){
+       plan={...plan,limitPrice:limit,maxDebitDollars:total,
+         estimatedFeeDollars:Math.round((total-count*limit)*10000)/10000,
+         conditionalProfitIfWinDollars:Math.round((count-total)*10000)/10000,
+         maximumLossIfLoseDollars:total};
+     }
+   }
+   plan={...plan,currentBestAsk};
    const id=createId(),orderId=createId();
    if(!uuidOk(id)||!uuidOk(orderId)||id===orderId)return {allowed:false,reason:'ORDER_ID_UNAVAILABLE'};
    const expiresAt=new Date(now()+30000).toISOString();
