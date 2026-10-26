@@ -87,7 +87,9 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
        probability:idea.externalWinProbability??idea.probability,
        probabilitySource:isCrypto?'CRYPTO_SCENARIO_PROXY':'ESPN_LIVE_MODEL',sourceVerified:true,marketMatchVerified:true,
        bankroll:Number(account.balance),holdings:account.holdings,
-       feePerContract:fee,now:now(),maxLossProbability:.15});
+       feePerContract:fee,now:now(),maxLossProbability:.15,
+       minimumEdge:isCrypto?.02:0,
+       maxBankrollFraction:isCrypto?Math.min(Number(idea.allocationFraction),Number(finalConsensus.allocationFraction)):null});
    if(!decision.allowed){reason=decision.reason;continue;}
    // Each strategy's order planner already enforces its own bankroll cap.
    // A second unrelated 2% check would falsely veto profitable total orders.
