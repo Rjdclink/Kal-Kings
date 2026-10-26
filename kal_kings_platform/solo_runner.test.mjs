@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {makeSoloRunner, isNeonSoloTrigger} from './solo_runner.mjs';
+import {makeSoloRunner, isNeonSoloTrigger, activeScanSlot} from './solo_runner.mjs';
 const now=Date.parse('2026-10-24T20:00:00Z');
 const q={id:'KXNFLGAME-26TEST-YES',event:'Test',yesAsk:.43,noAsk:.51,yesDepth:10,noDepth:10,observedAt:new Date(now).toISOString()};
 const runInput={invocationId:'run1',scheduledAt:new Date(now).toISOString()};
@@ -133,3 +133,5 @@ test('missing legacy quotes never produce fabricated two-leg orders',async()=>{
  assert.equal(out.status,'NO_VALID_LEGACY_QUOTES');
  assert.equal(f.calls.length,0);
 });
+
+test('five-second UI scan slots are stable for duplicate clients and change at boundaries',()=>{const one=activeScanSlot(Date.parse('2026-10-26T14:00:04Z'));const same=activeScanSlot(Date.parse('2026-10-26T14:00:04.999Z'));const next=activeScanSlot(Date.parse('2026-10-26T14:00:05Z'));assert.deepEqual(one,same);assert.notEqual(one.invocationId,next.invocationId);assert.equal(new Date(one.scheduledAt).toISOString(),'2026-10-26T14:00:00.000Z')});
