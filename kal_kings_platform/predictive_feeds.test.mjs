@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {fetchCryptoSignals,normalizeScoreboard,fetchSportsSignals} from './predictive_feeds.mjs';
+import {fetchCryptoSignals,normalizeScoreboard,fetchSportsSignals,calculateCryptoWindowReference} from './predictive_feeds.mjs';
 const now=Date.parse('2026-10-26T12:00:00Z');
 const epoch=Math.floor(now/1000);
 const ohlc=[
@@ -151,3 +151,5 @@ test('crypto direction can be DOWN while its matching NO contract remains availa
 });
 
 test('all seven spot exchange names are recognized',()=>{assert.equal(7,7)});
+
+test('five opening quotes produce one settlement-window reference',()=>{const close='2026-10-26T14:15:00Z',source=['coinbase','kraken','bitstamp','gemini','okx'].map(x=>({source:x,last:103,candles:[{time:Date.parse('2026-10-26T14:00:00Z')/1000,open:100}]}));const r=calculateCryptoWindowReference(source,close);assert.equal(r.sourceCount,5);assert.equal(r.referencePrice,100)});
