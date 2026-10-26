@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {fetchCryptoSignals,normalizeScoreboard,fetchSportsSignals,calculateCryptoWindowReference} from './predictive_feeds.mjs';
+import {fetchCryptoSignals,spotMomentum,normalizeScoreboard,fetchSportsSignals,calculateCryptoWindowReference} from './predictive_feeds.mjs';
 const now=Date.parse('2026-10-26T12:00:00Z');
 const epoch=Math.floor(now/1000);
 const ohlc=[
@@ -175,3 +175,15 @@ test('official Kalshi crypto floor strike replaces five-minute proxy as the trad
 });
 
 test('failed independent price venues are recorded, not counted as agreeing votes',async()=>{const fetcher=async url=>{if(!url.includes('coinbase.com')&&!url.includes('kalshi.com'))throw Error('Venue network blocked');return mockFetch(url)};const [signal]=await fetchCryptoSignals({fetcher,now,symbols:['BTC']});assert.ok(signal.missingSources.some(x=>x.source==='gemini'&&x.reason==='PROVIDER_FAILURE'));assert.equal(signal.sources,1)});
+
+test('Gemini minute-candle freshness uses its last observed minute, not the five-minute bucket start',async()=>{
+ const now=Date.parse('2026-10-26T12:01:40Z');
+ const start=Date.parse('2026-10-26T11:36:00Z');
+ const candles=Array.from({length:24},(_,i)=>[start+i*60000,100+i*.05,101+i*.05,99+i*.05,100.04+i*.05,2]).reverse();
+ const fetcher=async url=>{
+  if(!url.includes('api.gemini.com'))throw Error('Other provider unavailable');
+  return {ok:true,json:async()=>candles};
+ };
+ const rows=await spotMomentum(fetcher,'BTC',now);
+ assert.ok(rows.some(x=>x.source==='gemini'));
+});
