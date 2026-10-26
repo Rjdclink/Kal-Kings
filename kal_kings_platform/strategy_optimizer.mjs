@@ -118,7 +118,7 @@ export function assessKalshiValue({
  if(edge<minimumEdge-1e-9)return no('NO_NET_POSITIVE_EDGE',{edge:round(edge)});
  const budget=Math.min(cash,cash<100?cash*.25:cash*.02);
  if(debit>budget+1e-9)return no('INSUFFICIENT_RISK_BUDGET');
- const count=Math.min(Math.floor(depth),Math.floor(cash/debit),Math.max(1,Math.floor(budget/debit)),10);
+ const count=cash<100?1:Math.min(Math.floor(depth),Math.floor(cash/debit),Math.max(1,Math.floor(budget/debit)),10);
  if(count<1)return no('INSUFFICIENT_CAPITAL');
  return {allowed:true,reason:'INDEPENDENT_VALUE_APPROVED',strategy:'LIVE_SPORTS_VALUE',
    ticker:market.ticker,side,contracts:count,limitPrice:px,feePerContract:fee,
