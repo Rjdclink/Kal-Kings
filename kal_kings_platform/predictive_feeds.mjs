@@ -53,6 +53,7 @@ export async function spotMomentum(fetcher,symbol,now){
 }
 
 const SPORTS_MARKET_SERIES={NFL:'KXNFLGAME',NBA:'KXNBAGAME',NHL:'KXNHLGAME'};
+const SPORTS_TOTAL_SERIES={NFL:'KXNFLTOTAL',NBA:'KXNBATOTAL',NHL:'KXNHLTOTAL'};
 const safe=val=>{const n=Number(val);return Number.isFinite(n)?n:null;};
 function easternDate(when){
  const d=new Date(when);
@@ -82,8 +83,25 @@ export function selectSportsMarket(event,markets){
  }
  return null;
 }
-async function fetchSportsMarkets(fetcher,sport,now){
- const series=SPORTS_MARKET_SERIES[sport];if(!series)return [];
+export function selectTotalsMarket(game,markets){
+ const prefix=SPORTS_TOTAL_SERIES[game?.sport],date=game?.date;
+ if(!prefix||!/^\\d{4}-\\d{2}-\\d{2}$/.test(date||''))return null;
+ const [y,m,d]=date.split('-'),code=d+['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][Number(m)-1]+y.slice(-2);
+ const a=String(game?.awayAbbreviation||'').toUpperCase(),h=String(game?.homeAbbreviation||'').toUpperCase();
+ if(!a||!h||a===h||!Number.isFinite(Number(game?.totalLine)))return null;
+ const keys=[prefix+'-'+code+a+h+'-',prefix+'-'+code+h+a+'-'];
+ const matches=(Array.isArray(markets)?markets:[]).filter(q=>
+  keys.some(k=>String(q.ticker||'').startsWith(k))&&
+  ['active','open'].includes(q.status)&&q.floorStrike!=null&&
+  Number.isFinite(Number(q.floorStrike))&&q.yesAsk>0&&q.yesAsk<1&&
+  /collectively score more than/i.test(q.rulesPrimary||''))
+  .map(q=>({q,delta:Math.abs(Number(q.floorStrike)+.5-Number(game.totalLine))}))
+  .sort((x,y)=>x.delta-y.delta);
+ return matches[0]&&matches[0].delta<=3?matches[0].q:null;
+}
+
+async function fetchSportsMarkets(fetcher,sport,now,kind='game'){
+ const series=(kind==='total'?SPORTS_TOTAL_SERIES:SPORTS_MARKET_SERIES)[sport];if(!series)return [];
  try{
    const j=await json(fetcher,`${KALSHI}/events?series_ticker=${series}&status=open&limit=200&with_nested_markets=true`);
    return (j.events||[]).flatMap(e=>(e.markets||[]).map(m=>({
@@ -91,7 +109,7 @@ async function fetchSportsMarkets(fetcher,sport,now){
      yesAsk:safe(m.yes_ask_dollars),noAsk:safe(m.no_ask_dollars),
      yesBid:safe(m.yes_bid_dollars),noBid:safe(m.no_bid_dollars),
      yesDepth:safe(m.yes_ask_size_fp),noDepth:safe(m.no_ask_size_fp),
-     rulesPrimary:m.rules_primary||'',closeTime:m.close_time,
+     rulesPrimary:m.rules_primary||'',floorStrike:safe(m.floor_strike),closeTime:m.close_time,
      observedAt:new Date(now).toISOString(),eventTitle:e.title||'',marketTitle:m.title||'',
      source:'Kalshi'})));
  }catch{return []}
