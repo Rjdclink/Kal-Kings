@@ -1,5 +1,5 @@
 /** Kal Kings independent live signal-feed adapters. Read-only; never place orders. */
-import {cryptoConsensus,planDirectionalTrade,assessLateGame,assessTotals} from './predictive_strategies.mjs';
+import {cryptoConsensus,assessLateGame,assessTotals} from './predictive_strategies.mjs';
 import {technicalIndicators,assessCryptoRegime,matchSportsOutcome,assessTotalsProjection} from './strategy_optimizer.mjs';
 const KALSHI='https://external-api.kalshi.com/trade-api/v2';
 const ESPN='https://site.api.espn.com/apis/site/v2/sports';
@@ -150,32 +150,48 @@ export async function fetchCryptoSignals({fetcher=fetch,now=Date.now(),symbols=[
  const all=await Promise.all(symbols.filter(x=>candidates[x]).map(async symbol=>{
    const [s,m]=await Promise.allSettled([
     spotMomentum(fetcher,symbol,now),
-    json(fetcher,`${KALSHI}/events?series_ticker=KX${symbol}15M&status=open&limit=10&with_nested_markets=true`)
+    // Query MARKET listings directly. Nested /events can temporarily contain
+    // only an expiring contract and cause false "no matched contract" labels.
+    json(fetcher,`${KALSHI}/markets?series_ticker=KX${symbol}15M&status=open&limit=30`)
    ]);
    const spot=s.status==='fulfilled'?s.value:[],consensus=cryptoConsensus(spot,{symbol,now});
    const technical=spot.find(x=>x.source==='coinbase'&&x.indicators?.status==='OK')?.indicators||spot.find(x=>x.indicators?.status==='OK')?.indicators||null;
    const regime=assessCryptoRegime(consensus,technical);
-   const markets=m.status==='fulfilled'?(m.value.events||[]).flatMap(e=>(e.markets||[]).map(k=>({
+   let sourceMarkets=m.status==='fulfilled'&&Array.isArray(m.value.markets)?m.value.markets:[];
+   if(!sourceMarkets.length){
+     try{
+       const events=await json(fetcher,`${KALSHI}/events?series_ticker=KX${symbol}15M&status=open&limit=10&with_nested_markets=true`);
+       sourceMarkets=(events.events||[]).flatMap(e=>e.markets||[]);
+     }catch{/* An unavailable series is not a speculative authorization. */}
+   }
+   const markets=sourceMarkets.map(k=>({
     ticker:k.ticker,seriesTicker:`KX${symbol}15M`,symbol,status:k.status,
     rulesPrimary:k.rules_primary||'',closeTime:k.close_time,
     yesAsk:integer(k.yes_ask_dollars),noAsk:integer(k.no_ask_dollars),
     yesDepth:integer(k.yes_ask_size_fp??k.yes_ask_size),
     noDepth:integer(k.no_ask_size_fp??k.no_ask_size),
     observedAt:new Date(now).toISOString()
-   }))):[];
-   const available=markets.filter(x=>['open','active'].includes(x.status)&&Date.parse(x.closeTime)-now>90000)
+   }));
+   const available=markets.filter(x=>['open','active'].includes(x.status)&&
+       Date.parse(x.closeTime)-now>20000&&
+       Number(x.yesAsk)>0&&Number(x.yesAsk)<1&&Number(x.noAsk)>0&&Number(x.noAsk)<1)
      .sort((a,b)=>Date.parse(a.closeTime)-Date.parse(b.closeTime));
    const market=available[0]||null;
-   // Reporting a direction is NOT permission to submit an order: the independent,
-   // settlement-calibrated probabilistic model is not yet connected.
-   const decision=planDirectionalTrade({consensus,market,bankroll:0,feePerContract:NaN,model:null,now});
-   return {symbol,direction:regime.direction==='UNKNOWN'?consensus.direction:regime.direction,sources:consensus.sources,
+   // A public quote and a historical direction ARE actionable for a person
+   // to review, but do not by themselves prove a profitable automated order.
+   const signalDirection=consensus.direction;
+   const tradeDirection=regime.direction==='MIXED'?'UNKNOWN':signalDirection;
+   const manualSide=market&&(tradeDirection==='UP'?'yes':tradeDirection==='DOWN'?'no':null);
+   return {symbol,direction:tradeDirection,sources:consensus.sources,
     technical,regime:regime.regime,signalStrength:regime.signalStrength,forecastCalibrated:false,
     agreeingSources:consensus.agreeingSources,agreement:consensus.agreement,
     spreadPct:consensus.spreadPct??null,spotPrice:consensus.medianPrice??null,
     spotFeeds:consensus.observations.map(x=>({source:x.source,returnPct:x.returnPct})),
     marketTicker:market?.ticker||null,yesAsk:market?.yesAsk??null,noAsk:market?.noAsk??null,
-    closeTime:market?.closeTime||null,allowed:false,reason:decision.reason,
+    closeTime:market?.closeTime||null,
+    manualSide,manualReviewAvailable:Boolean(manualSide),signalIsForecast:false,
+    allowed:false,eligibleForAutomation:false,
+    reason:!market?'NO_MATCHING_ACTIVE_KALSHI_CONTRACT':'INDEPENDENT_PROBABILITY_NOT_ESTABLISHED',
     status:!market?'NO_OPEN_MATCHING_KALSHI_MARKET':consensus.reason,
     updatedAt:new Date(now).toISOString()};
  }));
