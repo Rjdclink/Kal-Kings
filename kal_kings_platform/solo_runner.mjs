@@ -70,6 +70,7 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
         const dir=await executeDirectional({ideas:predictive.ideas,
           account:{status:'VERIFIED',balance,holdings:account?.holdings,
             positionsComplete:account?.positionsComplete}});
+        scanMeta.directionalReason=dir?.reason||dir?.status||'NOT_APPROVED';
         if(['FILLED','PARTIALLY_FILLED','UNCERTAIN'].includes(dir?.status))
           return finish({status:'DIRECTIONAL_'+dir.status,ticker:dir.ticker});
         if(dir?.status==='HALTED_PENDING_RECONCILIATION')
