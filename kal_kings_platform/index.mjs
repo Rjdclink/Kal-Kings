@@ -555,7 +555,8 @@ const monitorDirectionalPositions=makeDirectionalLifecycle({sql,
   createId:randomUUID,now:Date.now});
 const runDirectional=makeDirectionalRunner({sql,fetchMarket:freshKalshiMarket,
   fetchOrderbook:getKalshiOrderbook,fetchFeeSchedule:getVerifiedKalshiFeeSchedule,
-  fetchFinalConsensus:async symbol=>(await fetchCryptoSignals({symbols:[symbol],runSimulation:false}))[0],
+  fetchFinalConsensus:async(symbol,idea)=>fetchFinalCryptoConsensus({
+    symbol,ticker:idea?.market?.ticker,referencePrice:idea?.referencePrice,now:Date.now()}),
   submit:submitSoloOrder,createId:randomUUID,now:Date.now});
 /** Read-only reconciliation. Kalshi's V2 writes are read back through
  * the authenticated /portfolio/orders listing. Never retry unknown writes.
