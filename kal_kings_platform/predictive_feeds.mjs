@@ -65,7 +65,7 @@ export async function fetchCryptoSignals({fetcher=fetch,now=Date.now(),symbols=[
     noDepth:integer(k.no_ask_size_fp??k.no_ask_size),
     observedAt:new Date(now).toISOString()
    }))):[];
-   const available=markets.filter(x=>x.status==='open'&&Date.parse(x.closeTime)-now>90000)
+   const available=markets.filter(x=>['open','active'].includes(x.status)&&Date.parse(x.closeTime)-now>90000)
      .sort((a,b)=>Date.parse(a.closeTime)-Date.parse(b.closeTime));
    const market=available[0]||null;
    // Reporting a direction is NOT permission to submit an order: the independent,
