@@ -47,7 +47,7 @@ export function sweepAsks(askLevels,quantity){
  return {cost:r6(cost),avgPrice:r6(cost/quantity),worstPrice:r4(highest),quantity};
 }
 /** Fully funded, conservative limit prices for two separate FOK legs. Not atomic. */
-export function optimizePairedDepth({ticker,book,balance,maxCapital,maxContracts=50,minimumNet=.01,slippagePerContract=.002}={}){
+export function optimizePairedDepth({ticker,book,balance,maxCapital,maxContracts=50,minimumNet=0,slippagePerContract=.002}={}){
  const money=num(balance),budget=num(maxCapital);
  if(!/^[A-Z0-9_-]{4,128}$/.test(ticker||'')||!validNumber(money)||money<=0||!validNumber(budget)||budget<=0||!book||!validNumber(slippagePerContract)||slippagePerContract<0)return null;
  const depthY=book.yesAsks?.reduce((s,x)=>s+x.quantity,0)||0;
@@ -246,7 +246,7 @@ export function evaluateRiskAdjustedEntry({candidate,freeCash,riskBudget,holding
   trials,seed});
  if(mc.executedTrials===0)return no('NO_EXECUTIONS_SIMULATED',{monteCarlo:mc,calibration,risk});
  if(mc.meanWorst5Percent < -riskBudget-1e-7)return no('MONTE_CARLO_TAIL_EXCEEDS_BUDGET',{monteCarlo:mc,calibration,risk});
- if(mc.meanPnl<=.001)return no('NO_POSITIVE_RISK_ADJUSTED_EDGE',{monteCarlo:mc,calibration,risk});
+ if(mc.meanPnl<=1e-9)return no('NO_POSITIVE_RISK_ADJUSTED_EDGE',{monteCarlo:mc,calibration,risk});
  const scenarioBacktest=snapshotBacktest(history);
  // Historical results cannot directly prove the paired spread; they inform
  // the confidence status but do not overwrite the current executable spread.
