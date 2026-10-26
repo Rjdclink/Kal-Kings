@@ -25,6 +25,7 @@ import {makeDirectionalRunner} from './directional_runner.mjs';
 import {makeDirectionalLifecycle} from './directional_lifecycle.mjs';
 import {rankStrategies} from './strategy_optimizer.mjs';
 import {verifyExceededTotal} from './total_strategy.mjs';
+import {makeUniverseScanner} from './universe_service.mjs';
 import {recordForecasts,resolveForecasts,getStrategyPerformance,getDirectionalOrders} from './strategy_history.mjs';
 import {planOneTimeMicroOrder,interpretMicroReceipt} from './live_trade_test.mjs';
 
