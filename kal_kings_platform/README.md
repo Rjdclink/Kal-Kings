@@ -1,5 +1,18 @@
 # Kal Kings | Sports, crypto and prediction market dashboard
 
+## Current Neon deployment (October 26, 2026)
+
+Kal Kings runs on **Neon Functions**, with one-minute unattended scheduled scans and additional five-second authenticated scans **while the dashboard is open**. The dashboard itself refreshes every three seconds; provider data can arrive more slowly. There is currently no separate always-on five-second worker when the dashboard is closed.
+
+The predictive crypto scanner retrieves seven independent exchange feeds: Coinbase, Kraken, Bitstamp, Gemini, OKX, KuCoin, and Bitfinex. Five agreeing sources qualify for consideration up to 20% of available Kalshi cash, six up to 30%, and unanimous seven up to 40%, subject to the 15% modeled-loss limit, independently modeled positive value after fees (2¢ minimum per contract), sufficient orderbook depth, and a verified final live quote. An initial 2,500-path Monte Carlo scenario uses the official Kalshi 15-minute starting target with seven-source spot-price data; the result is research valid for up to 30 seconds, not a guaranteed outcome. Final consensus and orderbook values are rechecked before submission. Historic indicators are secondary.
+
+The two automatic sports strategies are (1) an official scored-past OVER contract and (2) a verified commanding late-game lead priced with a separate live win-probability source. Automatic YES/NO buys use Kalshi's current V2 single-book order endpoint; manual YES/NO review and explicit confirmation are also available. The order journal and position monitor handle exchange-confirmed fills, signed NO holdings, protective exits, uncertain receipts, and concurrent-job locking. **No automatic realized profits are claimed without actual exchange receipts and settlement evidence.**
+
+_The older notes below describe earlier MVP behavior and may not reflect the latest runtime._
+
+---
+
+
 Deployment: Neon `kalkingsdashboard` serverless function (Node.js 24), not Railway or GitHub Actions.
 
 The dashboard asks the server every 3 seconds for a fresh state response. **That is not a guarantee that provider quotes update every 3 seconds.** Each provider's own updated timestamp is displayed. Market-data caches: Kalshi 3 seconds, Polymarket US 8 seconds, Coinbase crypto 12 seconds, Kalshi account 6 seconds. DraftKings uses a connected SharpAPI sportsbook-odds relay by default, with an optional separately configured The Odds API feed. The odds relay is read only and may be delayed by its provider. The dashboard polls every 3 seconds while open; the DraftKings relay is cached for 60 seconds by default to respect upstream limits. Setting this lower without sufficient purchased requests will hit provider limits. Sports quoteboards show ten distinct games per venue when available; the backend samples up to 200 quotes across eight Kalshi sports series and three Polymarket US pages. Crypto references show up to BTC, ETH, SOL, XRP, DOGE, and ADA quoted by Coinbase Exchange. TradingView links open charts; TradingView is *not* a prediction feed.
