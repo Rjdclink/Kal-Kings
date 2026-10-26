@@ -21,6 +21,7 @@ import {normalizeKalshiBook,monteCarloExitDecision} from './quant.mjs';
 import {assessLiveKalshiEntry,historyForExit,summarizeQuantState} from './quant_runtime.mjs';
 import {selectHistorySamples} from './history_sampler.mjs';
 import {fetchCryptoSignals,fetchSportsSignals} from './predictive_feeds.mjs';
+import {fetchFinalCryptoConsensus} from './crypto_final_consensus.mjs';
 import {makeDirectionalRunner} from './directional_runner.mjs';
 import {selectCryptoIdea} from './crypto_candidate.mjs';
 import {makeManualExecutor} from './manual_execution.mjs';
