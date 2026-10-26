@@ -600,7 +600,9 @@ const runSolo=makeSoloRunner({fetchAccount:getKalshiAccount,fetchQuotes:publicKa
  fetchMarket:freshKalshiMarket,monitorPositions:monitorKalshiPortfolio,
  quantRiskGate,recordSnapshots:recordQuantSamples,
  scanPredictive:()=>memo('predictive_scan',25000,collectPredictiveStrategies),
- monitorDirectional:monitorDirectionalPositions,executeDirectional:runDirectional,recordScan:recordScannerStatus,
+ monitorDirectional:monitorDirectionalPositions,executeDirectional:runDirectional,
+ acquireScanLease:acquireTradingLease,releaseScanLease:releaseTradingLease,
+ recordScan:recordScannerStatus,
  sql,submit:submitSoloOrder,createId:randomUUID,now:Date.now});
 /** Three-second user-session execution checks; Neon scheduled minutes remain
  * the unattended fallback. Database bucket guards prevent duplicate cycles.
