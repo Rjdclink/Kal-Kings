@@ -576,6 +576,7 @@ async function fetchKalshiOrdersForTicker(ticker){
 const manualOrders=makeManualExecutor({sql,fetchAccount:getKalshiAccount,
   fetchMarket:freshKalshiMarket,fetchOrderbook:getKalshiOrderbook,
   fetchFeeSchedule:getVerifiedKalshiFeeSchedule,
+  fetchOrders:fetchKalshiOrdersForTicker,
   submit:submitSoloOrder,createId:randomUUID,now:Date.now});
 async function getManualOrders(){
  const rows=await sql(`SELECT id,ticker,side,contracts,status,
