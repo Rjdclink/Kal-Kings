@@ -211,6 +211,8 @@ export async function fetchCryptoSignals({fetcher=fetch,now=Date.now(),symbols=[
     technical,regime:regime.regime,signalStrength:regime.signalStrength,forecastCalibrated:false,
     agreeingSources:consensus.agreeingSources,agreement:consensus.agreement,
     allocationFraction:consensus.allocationFraction,totalSupportedSources:7,
+    model,reference,modeledWinProbability:model?.status==='ESTIMATED'?
+      (tradeDirection==='UP'?model.lowerYesProbability:1-model.upperYesProbability):null,
     spreadPct:consensus.spreadPct??null,spotPrice:consensus.medianPrice??null,
     spotFeeds:consensus.observations.map(x=>({source:x.source,returnPct:x.returnPct})),
     marketTicker:market?.ticker||null,yesAsk:market?.yesAsk??null,noAsk:market?.noAsk??null,
