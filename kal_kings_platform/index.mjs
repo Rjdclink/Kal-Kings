@@ -812,7 +812,7 @@ async function state(){
    quotes:{kalshi:k,polymarket:p,draftkings:d.events},
    opportunities,priceGaps,favorites,sportsSignals:signals,riskPolicy:allocationPolicy,wagers:value(wr,[]),
    automatedOrders:ordersHistory,automatedExecutionSummary:executionSummary(ordersHistory),
-   kalshiSolo:{strategy:'Independent same-market complementary YES/NO quotes',scheduler:'Neon one-minute trigger',
+   kalshiSolo:{strategy:'Independent same-market complementary YES/NO quotes',scheduler:'Neon minute fallback plus authenticated five-second dashboard scans',
     opportunities:soloIdeas,orders:soloOrders,summary:summarizeSoloOrders(soloOrders),
     funded:account.balance!=null&&account.balance>0,autoWithoutDraftKings:true,
     cashReadyForReinvestment:cashAvailableForReinvestment(account).available,
