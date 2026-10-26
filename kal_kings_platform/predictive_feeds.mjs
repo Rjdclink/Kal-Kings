@@ -100,6 +100,37 @@ export function selectTotalsMarket(game,markets){
  return matches[0]&&matches[0].delta<=3?matches[0].q:null;
 }
 
+/** Examine every executable score-crossed total, not only the line shown
+ * by an unrelated sportsbook. Each is reverified against the actual
+ * exchange order book before any order can be submitted.
+ */
+export function selectExceededTotalsMarkets(game,markets,{now=Date.now(),max=24}={}){
+ const series=SPORTS_TOTAL_SERIES[game?.sport];
+ const date=game?.date,score=Number(game?.homeScore)+Number(game?.awayScore);
+ if(!series||typeof date!=='string'||!Number.isFinite(Date.parse(date+'T12:00:00Z'))||
+    !Number.isFinite(score)||score<=0)return [];
+ const [year,month,day]=date.split('-');
+ const short=day+['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][Number(month)-1]+year.slice(-2);
+ const home=String(game?.homeAbbreviation||'').toUpperCase(),
+   away=String(game?.awayAbbreviation||'').toUpperCase();
+ if(!/^[A-Z]{2,4}$/.test(home)||!/^[A-Z]{2,4}$/.test(away)||home===away)return [];
+ const prefixes=[series+'-'+short+away+home+'-',series+'-'+short+home+away+'-'];
+ return (Array.isArray(markets)?markets:[]).filter(x=>{
+   const strike=Number(x?.floorStrike),ask=Number(x?.yesAsk),depth=Number(x?.yesDepth);
+   return prefixes.some(prefix=>String(x.ticker||'').startsWith(prefix))&&
+     ['active','open'].includes(x.status)&&
+     Number.isFinite(strike)&&strike>0&&score>strike&&
+     Number.isFinite(ask)&&ask>0&&ask<1&&
+     Number.isFinite(depth)&&depth>=1&&
+     Date.parse(x.closeTime||'')>now+10000&&
+     /collectively score more than/i.test(String(x.rulesPrimary||''))&&
+     String(x.rulesPrimary||'').includes(String(strike))&&
+     /resolves? to Yes/i.test(String(x.rulesPrimary||''));
+ }).sort((a,b)=>
+   (a.yesAsk-b.yesAsk)||(Date.parse(a.closeTime)-Date.parse(b.closeTime)))
+ .slice(0,max);
+}
+
 async function fetchSportsMarkets(fetcher,sport,now,kind='game'){
  const series=(kind==='total'?SPORTS_TOTAL_SERIES:SPORTS_MARKET_SERIES)[sport];if(!series)return [];
  try{
@@ -168,7 +199,7 @@ export function normalizeScoreboard(data,sport,now=Date.now(),enrichment={}){
    const lateGame=assessLateGame({...game,now});
    const totalLine=Number(contest.odds?.find(x=>Number.isFinite(Number(x.overUnder)))?.overUnder);
    const totals=assessTotals({...game,totalLine:totalLine||null,weather,injuries,now});
-   if(lateGame.direction||totals.direction)out.push({id:event.id,event:event.name||'',
+   if(state==='in'||lateGame.direction||totals.direction)out.push({id:event.id,event:event.name||'',
      sport,score:`${away.score}-${home.score}`,period,clockSeconds:clock,
      lateGame,totals,windMph:weather.windMph??null,gustMph:weather.gustMph??null,
      injuryCount:injuries.length,verifiedWeather:Boolean(enrichment.weatherByCity?.[city]),
@@ -247,6 +278,9 @@ export async function fetchSportsSignals({fetcher=fetch,now=Date.now(),sports=['
        independentModelSource:probability.sourceVerified?'ESPN_LIVE_MODEL':null,
        modelPlayId:probability.modelPlayId||null,
        totalProjection,totalMarket:totalsMarket||null,
+       exceededTotalsMarkets:selectExceededTotalsMarkets({
+         ...game,homeScore:Number(home?.score),awayScore:Number(away?.score)
+       },totalMarkets,{now}),
        totalGame:{...signal.gameContext,date:game.date,
          homeAbbreviation:game.homeAbbreviation,awayAbbreviation:game.awayAbbreviation},
        kalshiMarketSource:market?'Kalshi public events':'NONE',
