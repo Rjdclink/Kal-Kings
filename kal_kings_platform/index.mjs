@@ -522,7 +522,7 @@ async function collectPredictiveStrategies(){
    }),{max:12});
  // Already-exceeded totals get FIRST re-price and fee verification.
  // Their preliminary quotes do not claim a guaranteed profit.
- const ideas=[...totalIdeas.slice(0,8),...rankedLate].slice(0,12);
+ const ideas=[...totalIdeas.slice(0,8),...rankedLate,...cryptos.map(x=>selectCryptoIdea(x,{now})).filter(Boolean)].slice(0,20);
  return {cryptoSignals:cryptos.length,sportsSignals:sports.length,stored:rows.length,ideas,universeScanned:universeResponse.status==='fulfilled'?universeResponse.value.scanned:0};
 }
 async function getPredictiveStrategies(){
