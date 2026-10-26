@@ -644,29 +644,33 @@ async function runCryptoCycle(source='dashboard'){
    VALUES($1::bigint,$2,'STARTED') ON CONFLICT DO NOTHING RETURNING tick_key`,
    [String(tick),source]);
  if(!lock.length)return {status:'ALREADY_CHECKED'};
- let status='SCANNER_UNAVAILABLE',scanned=0,candidates=0,ticker=null,lastReason=null;
+ let status='SCANNER_UNAVAILABLE',scanned=0,candidates=0,ticker=null,lastReason=null,stage='LEASE';
  const leaseId='crypto-'+tick+'-'+source;
  let leased=false;
  try{
    leased=await acquireTradingLease(leaseId);
    if(!leased)status='SCANNER_BUSY';
    else{
+   stage='FETCH_SIGNALS_AND_ACCOUNT';
    const [signals,account]=await Promise.all([
      memo('predictiveCrypto',30000,()=>fetchCryptoSignals({now:Date.now()})),
      getKalshiAccount()
    ]);
    scanned=signals.length;
+   stage='MAP_CRYPTO_CANDIDATES';
    const ideas=signals.map(x=>selectCryptoIdea(x,{now:Date.now()})).filter(Boolean);
    candidates=ideas.length;
+   stage='CHECK_ACCOUNT_AND_EDGE';
    if(account?.status!=='VERIFIED'||account.positionsComplete!==true)
      status='ACCOUNT_UNAVAILABLE';
    else if(!ideas.length)status='NO_MODELED_POSITIVE_VALUE';
    else{
+     stage='EXECUTE_PRICE_VERIFIED_ORDER';
      const result=await runDirectional({ideas,account});
      status=result.status;ticker=result.ticker||null;lastReason=result.reason||null;
    }
    }
- }catch{status='CRYPTO_SCAN_UNAVAILABLE'}
+ }catch{status='CRYPTO_SCAN_UNAVAILABLE';lastReason='STAGE_'+stage}
  finally{if(leased)try{await releaseTradingLease(leaseId)}catch{}}
  await sql(`UPDATE kal_kings_crypto_cycles SET status=$2,research_count=$3::integer,
    candidate_count=$4::integer,traded_ticker=$5,last_reason=$6,finished_at=now()
