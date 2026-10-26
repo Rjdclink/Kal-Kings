@@ -98,10 +98,10 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
    const inserted=await sql(`INSERT INTO kal_kings_directional_orders
      (ticker,event_key,strategy,side,contracts,entry_price,estimated_fees,modeled_probability,
       max_debit,client_order_id,status,created_at,updated_at)
-     VALUES($1,$2,$3,'yes',$4::numeric,$5::numeric,$6::numeric,$7::numeric,
-       $8::numeric,$9::uuid,'SUBMITTING',now(),now())
+     VALUES($1,$2,$3,$4,$5::numeric,$6::numeric,$7::numeric,$8::numeric,
+       $9::numeric,$10::uuid,'SUBMITTING',now(),now())
      ON CONFLICT(ticker) DO NOTHING RETURNING ticker`,
-     [ticker,String(idea.eventKey||ticker),idea.strategy,
+     [ticker,String(idea.eventKey||ticker),idea.strategy,decision.side,
       String(decision.contracts),String(decision.limitPrice),
       String(decision.estimatedFeesDollars??decision.feePerContract*decision.contracts),
       decision.modeledWinProbability==null?null:String(decision.modeledWinProbability),
