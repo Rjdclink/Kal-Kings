@@ -108,8 +108,9 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
       String(decision.estimatedMaxDebitDollars),clientId]);
    if(!inserted.length){alreadyAttempted=true;reason='ALREADY_ATTEMPTED';continue;}
    attempts++;
-   const request={ticker,client_order_id:clientId,side:'bid',
-      count:decision.contracts.toFixed(2),price:decision.limitPrice.toFixed(4),
+   const request={ticker,client_order_id:clientId,
+      side:decision.side==='no'?'ask':'bid',count:decision.contracts.toFixed(2),
+      price:(decision.side==='no'?1-decision.limitPrice:decision.limitPrice).toFixed(4),
       time_in_force:'fill_or_kill',self_trade_prevention_type:'taker_at_cross',
       cancel_order_on_pause:true};
    let status='UNCERTAIN',exchangeId=null,filled=0;
