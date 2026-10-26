@@ -16,3 +16,26 @@ export async function recordForecasts(sql,sports=[]){
  }
  return count;
 }
+
+export async function resolveForecasts(sql,fetchMarket){
+ const pending=await sql(`SELECT market_ticker FROM kal_kings_strategy_forecasts
+   WHERE won IS NULL AND recorded_at<now()-interval '30 minutes'
+   AND (last_checked_at IS NULL OR last_checked_at<now()-interval '15 minutes')
+   ORDER BY recorded_at ASC LIMIT 8`);
+ let resolved=0;
+ for(const x of pending){
+  let market=null;
+  try{market=await fetchMarket(x.market_ticker)}catch{}
+  if(['yes','no'].includes(market?.result)&&['settled','finalized'].includes(market.status)){
+   await sql(`UPDATE kal_kings_strategy_forecasts SET won=$2::boolean,
+     settlement_result=$3,settled_at=now(),last_checked_at=now()
+     WHERE market_ticker=$1 AND won IS NULL`,
+    [x.market_ticker,market.result==='yes',market.result]);
+   resolved++;
+  }else{
+   await sql(`UPDATE kal_kings_strategy_forecasts SET last_checked_at=now()
+     WHERE market_ticker=$1 AND won IS NULL`,[x.market_ticker]);
+  }
+ }
+ return resolved;
+}
