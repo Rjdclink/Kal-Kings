@@ -480,6 +480,7 @@ async function getPredictiveStrategies(){
 const monitorDirectionalPositions=makeDirectionalLifecycle({sql,
   fetchMarket:freshKalshiMarket,fetchOrderbook:getKalshiOrderbook,
   fetchSettlements:fetchKalshiSettlements,submit:submitSoloOrder,
+  getBidHistory:getQuantHistory,recordQuote:recordQuantQuote,
   createId:randomUUID,now:Date.now});
 const runDirectional=makeDirectionalRunner({sql,fetchMarket:freshKalshiMarket,
   fetchOrderbook:getKalshiOrderbook,submit:submitSoloOrder,createId:randomUUID,now:Date.now});
