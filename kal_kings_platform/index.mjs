@@ -514,7 +514,7 @@ async function collectPredictiveStrategies(){
     Date.parse(a.market.closeTime)-Date.parse(b.market.closeTime));
  const rankedLate=rankStrategies(sports.filter(x=>x.lateGame?.direction&&x.sourceVerified&&
    x.marketMatchVerified&&x.market&&Number.isFinite(Number(x.externalWinProbability))&&
-   x.externalWinProbability>=.85&&x.modelPlayId)
+   x.externalWinProbability>=.70&&x.modelPlayId)
    .map(x=>{
      const p=Number(x.externalWinProbability),ask=Number(x.market?.yesAsk);
      const fee=Number.isFinite(ask)&&ask>0&&ask<1?
