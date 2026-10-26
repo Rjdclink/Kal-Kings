@@ -1,5 +1,5 @@
 import {seeded} from './engine.mjs';
-export function runCryptoMonteCarlo({symbol,spotPrice,referencePrice,minutesRemaining,observedAt,now=Date.now(),trials=2500}={}){
+export function runCryptoMonteCarlo({symbol,spotPrice,referencePrice,minutesRemaining,observedAt,volatilityPct=.35,now=Date.now(),trials=2500}={}){
  if(!referencePrice||!spotPrice)return {status:'UNVERIFIED_REFERENCE'};
  const age=now-Date.parse(observedAt);
  if(age<0||age>30000)return {status:'STALE_RESEARCH'};
@@ -13,7 +13,9 @@ export function runCryptoMonteCarlo({symbol,spotPrice,referencePrice,minutesRema
   const x=Math.max(1e-12,rng()),y=rng();
   return Math.sqrt(-2*Math.log(x))*Math.cos(2*Math.PI*y);
  };
- const sigma=.0035*Math.sqrt(minutes/5),gap=Math.log(price/reference);
+ const vol=Number(volatilityPct);
+ if(!Number.isFinite(vol)||vol<0||vol>25)return {status:'UNVERIFIED_VOLATILITY'};
+ const sigma=Math.max(.003,vol/100)*Math.sqrt(minutes/5),gap=Math.log(price/reference);
  let wins=0;
  for(let i=0;i<trials;i++)if(gap+sigma*normal()+.0015*normal()>=0)wins++;
  const p=(wins+.5)/(trials+1),error=1.645*Math.sqrt(p*(1-p)/trials);
