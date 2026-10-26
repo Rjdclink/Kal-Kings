@@ -66,7 +66,7 @@ test('only same exact date and teams select a Kalshi sports outcome',()=>{
  assert.equal(selectSportsMarket({...data,awayAbbreviation:'SEA'},markets),null);
 });
 
-import {selectTotalsMarket} from './predictive_feeds.mjs';
+import {selectTotalsMarket,selectExceededTotalsMarkets} from './predictive_feeds.mjs';
 test('total matching rejects other games',()=>{assert.equal(selectTotalsMarket({sport:'NFL',date:'2026-10-26',homeAbbreviation:'PHI',awayAbbreviation:'DAL',totalLine:30},[]),null)});
 
 test('exact NFL total line selects correct Kalshi market',()=>{const market={ticker:'KXNFLTOTAL-26OCT26DALPHI-30',status:'active',floorStrike:29.5,yesAsk:.91,rulesPrimary:'If Dallas and Philadelphia collectively score more than 29.5 points, resolves to Yes.'};const e={sport:'NFL',date:'2026-10-26',homeAbbreviation:'PHI',awayAbbreviation:'DAL',totalLine:30};assert.equal(selectTotalsMarket(e,[market]).ticker,market.ticker)});
@@ -95,4 +95,19 @@ test('live scoreboard attaches exact market totals and scored outcome for execut
  assert.equal(result.length,1);
  assert.equal(result[0].totalMarket?.ticker,total.ticker);
  assert.equal(result[0].totalGame?.homeScore,31);
+});
+
+test('a live score above several Kalshi totals scans ALL qualifying thresholds, not one sportsbook line',()=>{
+ const game={sport:'NFL',date:'2026-10-26',homeAbbreviation:'PHI',
+   awayAbbreviation:'DAL',homeScore:31,awayScore:20};
+ const markets=[44.5,49.5,50.5,53.5].map((line,i)=>({
+   ticker:'KXNFLTOTAL-26OCT26DALPHI-'+i,status:'active',
+   floorStrike:line,yesAsk:.93+i*.01,noAsk:.09,
+   yesDepth:8,closeTime:new Date(now+180000).toISOString(),
+   rulesPrimary:'If Dallas and Philadelphia collectively score more than '+line+
+      ' points in the game, then market resolves to Yes.'}));
+ const out=selectExceededTotalsMarkets(game,markets,{now});
+ assert.equal(out.length,3);
+ assert.ok(out.every(x=>x.floorStrike<51));
+ assert.equal(selectExceededTotalsMarkets({...game,awayAbbreviation:'NYG'},markets,{now}).length,0);
 });
