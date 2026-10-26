@@ -35,7 +35,7 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
     if(!['yes','no'].includes(idea.side)||idea.model?.status!=='ESTIMATED'||
        Number(idea.model.trials)<2500||modelAge<0||modelAge>30000||
        !ticker.startsWith('KX'+idea.symbol+'15M-'))continue;
-    try{finalConsensus=await fetchFinalConsensus(idea.symbol)}catch{reason='CONSENSUS_UNAVAILABLE';continue;}
+    try{finalConsensus=await fetchFinalConsensus(idea.symbol,idea)}catch{reason='CONSENSUS_UNAVAILABLE';continue;}
     const elapsed=now()-Date.parse(finalConsensus?.updatedAt||'');
     if(finalConsensus?.direction!==(idea.side==='yes'?'UP':'DOWN')||
        Number(finalConsensus.agreeingSources)<5||finalConsensus.marketTicker!==ticker||
