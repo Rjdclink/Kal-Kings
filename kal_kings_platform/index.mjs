@@ -249,6 +249,7 @@ async function freshKalshiMarket(ticker){
   if(!m||m.ticker!==ticker||!['active','open'].includes(m.status))return null;
   return {id:m.ticker,ticker:m.ticker,status:m.status,closeTime:m.close_time,
      eventTicker:m.event_ticker||null,seriesTicker:m.series_ticker||null,rulesPrimary:m.rules_primary||'',
+     floorStrike:m.floor_strike==null?null:Number(m.floor_strike),
      event:m.title||m.ticker,
     yesAsk:m.yes_ask_dollars==null?Number(m.yes_ask)/100:Number(m.yes_ask_dollars),
     noAsk:m.no_ask_dollars==null?Number(m.no_ask)/100:Number(m.no_ask_dollars),
