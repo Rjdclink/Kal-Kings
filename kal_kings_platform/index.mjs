@@ -836,7 +836,7 @@ export default {
       }catch{return error(400,'Invalid trigger payload');}
       if(!isNeonSoloTrigger({'x-neon-trigger-invocation-id':request.headers.get('x-neon-trigger-invocation-id')},body))
         return error(403,'Not an authorized Neon schedule trigger');
-      try{return reply(await runSolo({invocationId:body.invocation_id,scheduledAt:body.data.scheduled_at}));}
+      try{const sports=await runSolo({invocationId:body.invocation_id,scheduledAt:body.data.scheduled_at}); const crypto=await runCryptoCycle('schedule').catch(()=>({status:'UNAVAILABLE'})); return reply({...sports,crypto});}
       catch{return error(503,'Kalshi automation unavailable');}
     }
     if(path==='/webhooks/tradingview'){
