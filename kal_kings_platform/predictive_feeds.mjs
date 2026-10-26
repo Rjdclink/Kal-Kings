@@ -3,7 +3,7 @@ import {cryptoConsensus,assessLateGame,assessTotals} from './predictive_strategi
 import {technicalIndicators,assessCryptoRegime,matchSportsOutcome,assessTotalsProjection} from './strategy_optimizer.mjs';
 import {additionalSpotCandles} from './spot_venue_adapters.mjs';
 import {runCryptoMonteCarlo} from './crypto_trade_model.mjs';
-const KALSHI='https://external-api.kalshi.com/trade-api/v2';
+const KALSHI='https://api.elections.kalshi.com/trade-api/v2';
 const ESPN='https://site.api.espn.com/apis/site/v2/sports';
 const integer=n=>Number.isFinite(Number(n))?Number(n):null;
 const timeout=()=>typeof AbortSignal==='undefined'?undefined:AbortSignal.timeout(7000);
