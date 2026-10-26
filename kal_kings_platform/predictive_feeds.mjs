@@ -207,7 +207,8 @@ export async function fetchCryptoSignals({fetcher=fetch,now=Date.now(),symbols=[
    }));
    const available=markets.filter(x=>['open','active'].includes(x.status)&&
        Date.parse(x.closeTime)-now>20000&&
-       Number(x.yesAsk)>0&&Number(x.yesAsk)<1&&Number(x.noAsk)>0&&Number(x.noAsk)<1)
+       ((Number(x.yesAsk)>0&&Number(x.yesAsk)<1)||
+        (Number(x.noAsk)>0&&Number(x.noAsk)<1)))
      .sort((a,b)=>Date.parse(a.closeTime)-Date.parse(b.closeTime));
    const market=available[0]||null;
    // Kalshi publishes the official CF Benchmarks opening target for an
