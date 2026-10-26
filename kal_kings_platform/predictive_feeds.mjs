@@ -20,13 +20,13 @@ const candidates={
 };
 function momentum(rows,{symbol,source,now}){
  const sorted=(Array.isArray(rows)?rows:[]).map(r=>({time:integer(r.time),
-  open:integer(r.open),close:integer(r.close)}))
+  open:integer(r.open),close:integer(r.close),high:integer(r.high),low:integer(r.low),volume:integer(r.volume)}))
   .filter(r=>r.time!==null&&r.open>0&&r.close>0&&r.time<=Math.floor(now/1000)+120)
   .sort((a,b)=>a.time-b.time);
  const latest=sorted.at(-1),first=sorted.at(-4);
  if(!latest||!first||now-latest.time*1000>360000||
    latest.time-first.time<600||latest.time-first.time>1500)return null;
- return {symbol,source,start:first.open,last:latest.close,observedAt:new Date(now).toISOString(),
+ return {symbol,source,start:first.open,last:latest.close,indicators:technicalIndicators(sorted),observedAt:new Date(now).toISOString(),
    oldestCandleAt:new Date(first.time*1000).toISOString(),newestCandleAt:new Date(latest.time*1000).toISOString()};
 }
 export async function spotMomentum(fetcher,symbol,now){
@@ -36,15 +36,15 @@ export async function spotMomentum(fetcher,symbol,now){
   let j,rows;
   if(source==='coinbase'){
    j=await json(fetcher,`https://api.exchange.coinbase.com/products/${pair.coinbase}/candles?granularity=300`);
-   rows=Array.isArray(j)?j.map(x=>({time:x[0],open:x[3],close:x[4]})):[];
+   rows=Array.isArray(j)?j.map(x=>({time:x[0],open:x[3],high:x[2],low:x[1],close:x[4],volume:x[5]})):[];
   }else if(source==='kraken'){
    j=await json(fetcher,`https://api.kraken.com/0/public/OHLC?pair=${pair.kraken}&interval=5`);
    if(j.error?.length)throw Error('Kraken data error');
    const array=Object.values(j.result||{}).find(Array.isArray)||[];
-   rows=array.map(x=>({time:x[0],open:x[1],close:x[4]}));
+   rows=array.map(x=>({time:x[0],open:x[1],high:x[2],low:x[3],close:x[4],volume:x[6]}));
   }else{
-   j=await json(fetcher,`https://www.bitstamp.net/api/v2/ohlc/${pair.bitstamp}/?step=300&limit=5`);
-   rows=(j.data?.ohlc||[]).map(x=>({time:x.timestamp,open:x.open,close:x.close}));
+   j=await json(fetcher,`https://www.bitstamp.net/api/v2/ohlc/${pair.bitstamp}/?step=300&limit=75`);
+   rows=(j.data?.ohlc||[]).map(x=>({time:x.timestamp,open:x.open,high:x.high,low:x.low,close:x.close,volume:x.volume}));
   }
   return momentum(rows,{symbol,source,now});
  });
@@ -104,6 +104,8 @@ export async function fetchCryptoSignals({fetcher=fetch,now=Date.now(),symbols=[
     json(fetcher,`${KALSHI}/events?series_ticker=KX${symbol}15M&status=open&limit=10&with_nested_markets=true`)
    ]);
    const spot=s.status==='fulfilled'?s.value:[],consensus=cryptoConsensus(spot,{symbol,now});
+   const technical=spot.find(x=>x.source==='coinbase'&&x.indicators?.status==='OK')?.indicators||spot.find(x=>x.indicators?.status==='OK')?.indicators||null;
+   const regime=assessCryptoRegime(consensus,technical);
    const markets=m.status==='fulfilled'?(m.value.events||[]).flatMap(e=>(e.markets||[]).map(k=>({
     ticker:k.ticker,seriesTicker:`KX${symbol}15M`,symbol,status:k.status,
     rulesPrimary:k.rules_primary||'',closeTime:k.close_time,
@@ -118,7 +120,8 @@ export async function fetchCryptoSignals({fetcher=fetch,now=Date.now(),symbols=[
    // Reporting a direction is NOT permission to submit an order: the independent,
    // settlement-calibrated probabilistic model is not yet connected.
    const decision=planDirectionalTrade({consensus,market,bankroll:0,feePerContract:NaN,model:null,now});
-   return {symbol,direction:consensus.direction,sources:consensus.sources,
+   return {symbol,direction:regime.direction==='UNKNOWN'?consensus.direction:regime.direction,sources:consensus.sources,
+    technical,regime:regime.regime,signalStrength:regime.signalStrength,forecastCalibrated:false,
     agreeingSources:consensus.agreeingSources,agreement:consensus.agreement,
     spreadPct:consensus.spreadPct??null,spotPrice:consensus.medianPrice??null,
     spotFeeds:consensus.observations.map(x=>({source:x.source,returnPct:x.returnPct})),
