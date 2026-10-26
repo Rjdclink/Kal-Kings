@@ -2,7 +2,9 @@ export function selectCryptoIdea(signal,{now=Date.now()}={}){
  if(!signal||!['UP','DOWN'].includes(signal.direction)||!signal.marketTicker)return null;
  const n=Number(signal.agreeingSources),fraction=n===7?.4:n===6?.3:n===5?.2:0;
  if(!fraction||Number(signal.reference?.sourceCount)<5||
-    signal.reference?.exactBenchmarkReference!==true)return null;
+    signal.reference?.exactBenchmarkReference!==true||
+    !(Number(signal.reference?.referencePrice)>0)||
+    !Number.isFinite(Number(signal.reference?.referencePrice)))return null;
  const model=signal.model,p=Number(signal.modeledWinProbability);
  const age=now-Date.parse(model?.observedAt||'');
  if(model?.status!=='ESTIMATED'||Number(model.trials)<2500||
