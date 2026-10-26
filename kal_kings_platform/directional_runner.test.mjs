@@ -185,3 +185,11 @@ test('70 to 85 percent forecast may auto-buy commanding late leader when net pri
  assert.equal(outcome.status,'FILLED');
  assert.equal(f.orders.length,1);
 });
+
+test('Kalshi explicitly rejecting an automatic sports/crypto order is not misreported as an uncertain fill',async()=>{
+ const f=fixture({submit:async()=>{const e=new Error('Kalshi refuses write');e.httpStatus=403;throw e}});
+ const result=await f.runner({ideas:[idea],
+   account:{status:'VERIFIED',balance:15,holdings:[],positionsComplete:true}});
+ assert.equal(result.status,'REJECTED');
+ assert.equal(result.reason,'KALSHI_ORDER_PERMISSION_DENIED');
+});
