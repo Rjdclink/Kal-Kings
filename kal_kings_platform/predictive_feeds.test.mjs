@@ -16,6 +16,7 @@ const mockFetch=async url=>{
  else if(url.includes('kraken.com'))value={error:[],result:{XXBTZUSD:ohlc.map(v=>[v[0],String(v[3]),'110','90',String(v[4]),'100','2',1])}};
  else if(url.includes('bitstamp.net'))value={data:{ohlc:ohlc.map(v=>({timestamp:String(v[0]),open:String(v[3]),close:String(v[4])}))}};
  else if(url.includes('api.gemini.com'))value=ohlc.map(v=>[v[0]*1000,v[3],110,90,v[4],1]);
+ else if(url.includes('www.okx.com'))value={code:'0',data:ohlc.map(v=>[String(v[0]*1000),String(v[3]),'110','90',String(v[4]),'1'])};
  else if(url.includes('kalshi.com'))value={events:[{event_ticker:'KXBTC15M-26OCT261210',markets:[market]}]};
  else throw Error('Unexpected URL: '+url);
  return {ok:true,json:async()=>value};
