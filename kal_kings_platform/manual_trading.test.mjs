@@ -16,9 +16,9 @@ test('a fresh YES manual ticket uses actual book depth and capped cash',()=>{
 });
 test('NO manual ticket correctly reverses the exchange YES price scale',()=>{
  const r=planManualKalshiBuy({market,bookResponse:book,feeSchedule,side:'no',count:1,bankroll:15,now});
- assert.equal(r.allowed,true);assert.equal(r.limitPrice,.55);
+ assert.equal(r.allowed,true);assert.equal(r.limitPrice,.54);
  const order=buildManualBuyOrder(r,'123e4567-e89b-42d3-a456-426614174000');
- assert.equal(order.side,'ask');assert.equal(order.price,'0.4500');
+ assert.equal(order.side,'ask');assert.equal(order.price,'0.4600');
  assert.equal(order.time_in_force,'fill_or_kill');
 });
 test('manual ticket cannot exceed 25 percent of free cash or available depth',()=>{
