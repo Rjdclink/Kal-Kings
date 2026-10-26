@@ -33,13 +33,21 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
     const lock=await sql('INSERT INTO kal_kings_solo_runs(invocation_id,scheduled_at) VALUES($1,$2::timestamptz) ON CONFLICT DO NOTHING RETURNING invocation_id',[invocationId,scheduledAt]);
     if(!lock.length)return {status:'DUPLICATE_RUN'};
     let scanMeta={cryptoSignals:0,sportsSignals:0,universeScanned:0,ideaCount:0,directionalReason:null};
+    let leaseAcquired=false;
     const finish=async result=>{
-      await sql('UPDATE kal_kings_solo_runs SET result=$2,finished_at=now() WHERE invocation_id=$1',[invocationId,result.status]);
-      try{await recordScan({...scanMeta,...result})}catch{/* Diagnostics must never create an unsafe retry. */}
+      try{
+        await sql('UPDATE kal_kings_solo_runs SET result=$2,finished_at=now() WHERE invocation_id=$1',[invocationId,result.status]);
+        try{await recordScan({...scanMeta,...result})}catch{/* Diagnostics must not prevent future scans. */}
+      }finally{
+        if(leaseAcquired)try{await releaseScanLease(invocationId)}catch{/* Lease expires automatically. */}
+      }
       return result;
     };
-    let stage='MONITOR';
+    let stage='LEASE';
     try{
+      leaseAcquired=await acquireScanLease(invocationId);
+      if(!leaseAcquired)return finish({status:'SCANNER_BUSY'});
+      stage='MONITOR';
       // Reconcile bot positions and inspect exchange-held cash before seeking new
       // entries. Settlement notices are NOT manually credited to bankroll.
       const monitored=await monitorPositions();
