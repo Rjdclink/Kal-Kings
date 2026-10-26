@@ -135,3 +135,6 @@ test('missing legacy quotes never produce fabricated two-leg orders',async()=>{
 });
 
 test('five-second UI scan slots are stable for duplicate clients and change at boundaries',()=>{const one=activeScanSlot(Date.parse('2026-10-26T14:00:04Z'));const same=activeScanSlot(Date.parse('2026-10-26T14:00:04.999Z'));const next=activeScanSlot(Date.parse('2026-10-26T14:00:05Z'));assert.deepEqual(one,same);assert.notEqual(one.invocationId,next.invocationId);assert.equal(new Date(one.scheduledAt).toISOString(),'2026-10-26T14:00:00.000Z')});
+
+test('a simultaneous five-second scan cannot start another cash-consuming worker',async()=>{let placed=0;const f=fixture({acquireScanLease:async()=>false,submit:async()=>{placed++;return{fill_count:'1.00'}}});const result=await f.run(runInput);assert.equal(result.status,'SCANNER_BUSY');assert.equal(placed,0)});
+test('an acquired scan lease is released after completion',async()=>{let released=0;const f=fixture({acquireScanLease:async()=>true,releaseScanLease:async()=>{released++}});await f.run(runInput);assert.equal(released,1)});
