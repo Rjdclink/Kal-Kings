@@ -9,7 +9,8 @@ import {assessKalshiValue} from './strategy_optimizer.mjs';
 import {assessAlreadyExceededTotal} from './total_strategy.mjs';
 const validTicker=t=>/^[A-Z0-9_-]{4,128}$/.test(t||'');
 const age=(v,now)=>now-Date.parse(v||'');
-export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSchedule,submit,createId,now=Date.now}){
+export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSchedule,
+ fetchFinalConsensus,submit,createId,now=Date.now}){
  return async function run({ideas=[],account}={}){
   const clock=now();
   if(account?.status!=='VERIFIED'||account?.positionsComplete!==true||
@@ -22,11 +23,12 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
   for(const idea of Array.isArray(ideas)?ideas:[]){
    const m=idea?.market,ticker=m?.ticker;
    const isTotal=idea?.strategy==='TOTAL_ALREADY_OVER';
-   if(!['LATE_GAME_LEAD','TOTAL_ALREADY_OVER'].includes(idea?.strategy)||
+   const isCrypto=idea?.strategy==='CRYPTO_DIRECTIONAL_CONSENSUS';
+   if(!['LATE_GAME_LEAD','TOTAL_ALREADY_OVER','CRYPTO_DIRECTIONAL_CONSENSUS'].includes(idea?.strategy)||
       idea.sourceVerified!==true||idea.marketMatchVerified!==true||!validTicker(ticker)||
-      (!isTotal&&(!idea.modelPlayId||typeof idea.modelPlayId!=='string'))||
+      (!isTotal&&!isCrypto&&(!idea.modelPlayId||typeof idea.modelPlayId!=='string'))||
       !Number.isFinite(age(idea.updatedAt,clock))||age(idea.updatedAt,clock)<0||
-      age(idea.updatedAt,clock)>10_000)continue;
+      age(idea.updatedAt,clock)>(isCrypto?30_000:10_000))continue;
    const prefix=ticker.slice(0,ticker.lastIndexOf('-')+1);
    if(account.holdings.some(x=>String(x?.ticker||'').startsWith(prefix)&&
       Number.isFinite(Number(x?.position))&&Number(x.position)!==0)){
