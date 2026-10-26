@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {selectCryptoIdea} from './crypto_candidate.mjs';
+import {selectCryptoIdea,rankCryptoCandidates} from './crypto_candidate.mjs';
 test('missing research cannot qualify',()=>assert.equal(selectCryptoIdea(null),null));
 
 const now=Date.parse('2026-10-26T14:00:00Z'),ticker='KXBTC15M-26OCT261415-15';
@@ -29,4 +29,14 @@ test('model probability below 70 percent does not qualify under broadened foreca
 
 test('no Kalshi official reference price means no executable crypto opportunity',()=>{
  assert.equal(selectCryptoIdea({...signal,reference:{sourceCount:6,exactBenchmarkReference:true}},{now}),null);
+});
+
+test('unanimous seven-venue agreement receives priority ahead of otherwise eligible five-venue ideas',()=>{
+ const high={...signal,symbol:'ETH',marketTicker:'KXETH15M-26OCT261415-15',
+   market:{ticker:'KXETH15M-26OCT261415-15'},agreeingSources:7,allocationFraction:.4};
+ const low={...signal,agreeingSources:5,allocationFraction:.2};
+ const ranked=rankCryptoCandidates([low,high],{now});
+ assert.equal(ranked.length,2);
+ assert.equal(ranked[0].symbol,'ETH');
+ assert.equal(ranked[0].allocationFraction,.4);
 });
