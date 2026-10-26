@@ -99,14 +99,26 @@ $('#tradeShortlist').addEventListener('click',ev=>{const button=ev.target.closes
 function renderPredictive(){
  const rows=data.predictiveStrategies||[];
  const target=$('#predictiveCards');
- target.innerHTML=rows.length?rows.slice(0,14).map(r=>{
+ target.innerHTML=rows.length?rows.slice(0,18).map(r=>{
    const signal=r.details||{},crypto=r.strategy==='CRYPTO_DIRECTIONAL_CONSENSUS';
-   const title=crypto?r.asset:r.asset;
-   const detail=crypto?(r.sourceCount+' independent spot exchanges · '+(r.marketTicker||'No matched contract')):
-     (r.strategy==='LATE_GAME_LEAD'?'Commanding late-game lead':'Wind, injuries and game-total context');
-   const direction=r.direction||(crypto?'No consensus':'No directional result');
-   return `<div class="ledgerline"><div><strong>${esc(title)}</strong><div class="tiny">${esc(r.strategy.replaceAll('_',' '))} · ${esc(detail)}</div><div class="tiny">${esc(r.status||'REVIEW')} · ${time(r.updatedAt)}</div></div><div class="number">${esc(direction)}<div class="tiny">Research only</div></div></div>`;
- }).join(''):'<div class="empty"><strong>No predictive observations yet</strong><p>The independent minute scanner is awaiting data.</p></div>';
+   const direction=r.direction||(crypto?'No consensus':'Watching');
+   const ticker=crypto?signal.marketTicker:
+      (signal.totalMarket?.ticker||signal.market?.ticker||null);
+   const side=crypto?(signal.manualSide|| (direction==='UP'?'yes':direction==='DOWN'?'no':null)):
+      ticker?'yes':null;
+   const price=crypto?(side==='yes'?signal.yesAsk:signal.noAsk):
+      (signal.totalMarket?.yesAsk||signal.market?.yesAsk);
+   const canReview=Boolean(ticker&&side&&Number(price)>0&&Number(price)<1);
+   const descriptor=crypto?(r.sourceCount+' connected spot exchanges · '+(ticker||'No current Kalshi quote')):
+      (r.strategy==='LATE_GAME_LEAD'?'Live game winner · '+(ticker||'Awaiting contract'):
+       'Live game total · '+(ticker||'Awaiting contract'));
+   const card=canReview?`<button class="btn alt" type="button" data-manual-market="${esc(ticker)}" data-manual-side="${esc(side)}" style="margin-top:7px;padding:7px 10px">Review ${side.toUpperCase()} @ ${(Number(price)*100).toFixed(1)}¢</button>`:'';
+   return `<div class="ledgerline"><div><strong>${esc(r.asset)}</strong>
+      <div class="tiny">${esc(descriptor)}</div>
+      <div class="tiny">${time(r.updatedAt)} · ${crypto?'Independent momentum research':'Live sports research'}</div>
+      ${card}</div><div class="number">${esc(direction)}
+       <div class="tiny">${canReview?'Manual option':'Monitoring'}</div></div></div>`;
+ }).join(''):'<div class="empty"><strong>Waiting for market signals</strong><p>Research feeds update as current prices become available.</p></div>';
 }
 function renderUniverse(){
  const u=data.marketUniverse||{},rows=u.research||[];
