@@ -111,3 +111,40 @@ test('a live score above several Kalshi totals scans ALL qualifying thresholds, 
  assert.ok(out.every(x=>x.floorStrike<51));
  assert.equal(selectExceededTotalsMarkets({...game,awayAbbreviation:'NYG'},markets,{now}).length,0);
 });
+
+test('official Kalshi markets endpoint supplies actionable YES and NO quotes even if nested events are unavailable',async()=>{
+ const fetcher=async url=>{
+   if(url.includes('/trade-api/v2/markets?')){
+     return {ok:true,json:async()=>({markets:[{...market,status:'active'}]})};
+   }
+   if(url.includes('/trade-api/v2/events?')){
+     return {ok:false,json:async()=>({})};
+   }
+   return mockFetch(url);
+ };
+ const result=await fetchCryptoSignals({fetcher,now,symbols:['BTC']});
+ assert.equal(result[0].marketTicker,market.ticker);
+ assert.equal(result[0].yesAsk,.68);
+ assert.equal(result[0].noAsk,.33);
+ assert.equal(result[0].signalIsForecast,false);
+ assert.equal(result[0].manualReviewAvailable,true);
+});
+test('crypto direction can be DOWN while its matching NO contract remains available for manual review',async()=>{
+ const fetcher=async url=>{
+  if(url.includes('/trade-api/v2/markets?'))
+    return {ok:true,json:async()=>({markets:[{...market,status:'active'}]})};
+  if(url.includes('/trade-api/v2/events?'))
+    return {ok:false,json:async()=>({})};
+  if(url.includes('coinbase.com'))
+    return {ok:true,json:async()=>ohlc.map(x=>[x[0],x[1],x[2],x[4],x[3],x[5]])};
+  if(url.includes('kraken.com'))
+    return {ok:true,json:async()=>({error:[],result:{XBTUSD:ohlc.map(x=>[x[0],String(x[4]),'110','90',String(x[3]),'100','2',1])}})};
+  if(url.includes('bitstamp.net'))
+    return {ok:true,json:async()=>({data:{ohlc:ohlc.map(x=>({timestamp:String(x[0]),open:String(x[4]),close:String(x[3])}))}})};
+  throw Error('Unknown provider');
+ };
+ const result=await fetchCryptoSignals({fetcher,now,symbols:['BTC']});
+ assert.equal(result[0].direction,'DOWN');
+ assert.equal(result[0].marketTicker,market.ticker);
+ assert.equal(result[0].manualSide,'no');
+});
