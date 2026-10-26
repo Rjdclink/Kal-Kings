@@ -196,7 +196,16 @@ export async function fetchCryptoSignals({fetcher=fetch,now=Date.now(),symbols=[
        Number(x.yesAsk)>0&&Number(x.yesAsk)<1&&Number(x.noAsk)>0&&Number(x.noAsk)<1)
      .sort((a,b)=>Date.parse(a.closeTime)-Date.parse(b.closeTime));
    const market=available[0]||null;
-   const reference=market?calculateCryptoWindowReference(spot,market.closeTime):null;
+   // Kalshi publishes the official CF Benchmarks opening target for an
+   // active 15-minute contract. Prefer it over inferred spot candle opens.
+   const strike=Number(market?.floorStrike);
+   const liveSpots=spot.map(x=>Number(x.last)).filter(x=>Number.isFinite(x)&&x>0)
+      .sort((a,b)=>a-b);
+   const reference=market&&strike>0&&Number.isFinite(strike)&&liveSpots.length>=5?
+     {referencePrice:strike,spotPrice:liveSpots[Math.floor(liveSpots.length/2)],
+       sourceCount:liveSpots.length,source:'KALSHI_OFFICIAL_CF_OPENING_TARGET',
+       exactBenchmarkReference:true}:
+     (market?calculateCryptoWindowReference(spot,market.closeTime):null);
    const model=runSimulation&&reference&&consensus.allocationFraction>0?
      runCryptoMonteCarlo({symbol,spotPrice:reference.spotPrice,
       referencePrice:reference.referencePrice,
