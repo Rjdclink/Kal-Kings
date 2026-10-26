@@ -20,6 +20,7 @@ import {cashAvailableForReinvestment} from './kalshi_manager.mjs';
 import {normalizeKalshiBook,monteCarloExitDecision} from './quant.mjs';
 import {assessLiveKalshiEntry,historyForExit,summarizeQuantState} from './quant_runtime.mjs';
 import {selectHistorySamples} from './history_sampler.mjs';
+import {fetchCryptoSignals,fetchSportsSignals} from './predictive_feeds.mjs';
 import {planOneTimeMicroOrder,interpretMicroReceipt} from './live_trade_test.mjs';
 
 const HTML=readFileSync(new URL('./dashboard.html',import.meta.url),'utf8');
@@ -418,9 +419,52 @@ const monitorKalshiPortfolio=makeKalshiLifecycle({fetchAccount:getKalshiAccount,
  fetchSettlements:fetchKalshiSettlements,fetchMarket:freshKalshiMarket,
  recordQuantQuote,getQuantHistory,quantExit:monteCarloExitDecision,
  sql,submit:submitSoloOrder,createId:randomUUID,now:Date.now});
+
+// Parallel non-trading predictive scan, persisted to Neon for cross-refresh visibility.
+// No inferred price momentum or scoreboard favorite may submit a wager: the
+// current execution route still insists on independently validated price/edge.
+async function collectPredictiveStrategies(){
+ const now=Date.now();
+ const [cryptoResponse,sportsResponse]=await Promise.allSettled([
+   fetchCryptoSignals({now}),fetchSportsSignals({now})
+ ]);
+ const cryptos=cryptoResponse.status==='fulfilled'?cryptoResponse.value:[];
+ const sports=sportsResponse.status==='fulfilled'?sportsResponse.value:[];
+ const rows=[
+   ...cryptos.map(x=>({asset:x.symbol,strategy:'CRYPTO_DIRECTIONAL_CONSENSUS',
+     direction:x.direction==='UNKNOWN'?null:x.direction,status:x.status||'DATA_UNAVAILABLE',
+     source_count:x.sources||0,market_ticker:x.marketTicker||null,details:x})),
+   ...sports.flatMap(x=>[
+     ...(x.lateGame?.direction?[{asset:x.event,strategy:'LATE_GAME_LEAD',
+       direction:x.lateGame.direction,status:x.lateGame.reason,
+       source_count:1,market_ticker:null,details:x}]:[]),
+     ...(x.totals?.direction?[{asset:x.event,strategy:'OVER_UNDER_CONTEXT',
+       direction:x.totals.direction,status:x.totals.reason,
+       source_count:1,market_ticker:null,details:x}]:[])
+   ])
+ ];
+ if(rows.length){
+   await sql(`INSERT INTO kal_kings_predictive_signals
+     (asset,strategy,direction,status,source_count,market_ticker,details,observed_at)
+     SELECT p.asset,p.strategy,p.direction,p.status,p.source_count,p.market_ticker,p.details,now()
+     FROM jsonb_to_recordset($1::jsonb) AS p(asset text,strategy text,direction text,status text,
+       source_count integer,market_ticker text,details jsonb)`,[JSON.stringify(rows)]);
+ }
+ return {cryptoSignals:cryptos.length,sportsSignals:sports.length,stored:rows.length};
+}
+async function getPredictiveStrategies(){
+ const rows=await sql(`SELECT DISTINCT ON (asset,strategy) asset,strategy,direction,status,
+   source_count,market_ticker,details::text AS details,observed_at
+   FROM kal_kings_predictive_signals ORDER BY asset,strategy,observed_at DESC LIMIT 40`);
+ return rows.map(r=>({asset:r.asset,strategy:r.strategy,direction:r.direction,
+   status:r.status,sourceCount:Number(r.source_count),marketTicker:r.market_ticker,
+   updatedAt:r.observed_at,details:typeof r.details==='string'?JSON.parse(r.details):r.details}));
+}
+
 const runSolo=makeSoloRunner({fetchAccount:getKalshiAccount,fetchQuotes:publicKalshi,
  fetchMarket:freshKalshiMarket,monitorPositions:monitorKalshiPortfolio,
- quantRiskGate,recordSnapshots:recordQuantSamples,sql,submit:submitSoloOrder,createId:randomUUID,now:Date.now});
+ quantRiskGate,recordSnapshots:recordQuantSamples,scanPredictive:collectPredictiveStrategies,
+ sql,submit:submitSoloOrder,createId:randomUUID,now:Date.now});
 async function getPositionWatches(){
  const rows=await sql(`SELECT ticker,position_side,status,entry_price::text AS entry_price,
  high_bid::text AS high_bid,exit_fill_count::text AS exit_fill_count,updated_at
@@ -553,6 +597,7 @@ async function state(){
     memo('crypto',TTL.crypto,cryptoSpot),memo('polyaccount',TTL.polyaccount,polyAccountCheck),getTradingViewAlerts(),memo('trends',TTL.trends,cryptoTrends),tradingViewEnabled(),getAutoOrders(),getSoloOrders(),getPositionWatches(),getBotSettlements(),getQuantDiagnostics()
   ]);
   const value=(r,fallback)=>r.status==='fulfilled'?r.value:fallback;
+  const predictive=await getPredictiveStrategies().catch(()=>[]);
   const k=value(kr,[]),p=value(pr,[]),d=value(dr,{events:[],issues:['Odds provider unavailable']});
   const account=value(ar,{status:'UNAVAILABLE',balance:null,holdings:[]});
   const bankroll=value(br,{amount:null,updatedAt:null});
@@ -590,6 +635,7 @@ async function state(){
    holdings:account.holdings,kalshiStatus:account.status,polymarketStatus:value(polyAuth,{status:'UNAVAILABLE'}).status,crypto:enrichedCrypto,
    tradingView:{configured:value(tvReady,false),alertsReceived:alerts.length,alerts,source:'TradingView configured webhooks; spot indicators computed from Coinbase'},
    quantitativeAnalysis:value(quantReport,{confidence:'DATA_UNAVAILABLE',verifiedExpectedProfit:null,recent:[]}),
+   predictiveStrategies:predictive,
    config:{...requiredEnv(),oddsFeedConfigured:true,neonStorageReady:br.status==='fulfilled'},
    quotes:{kalshi:k,polymarket:p,draftkings:d.events},
    opportunities,priceGaps,favorites,sportsSignals:signals,riskPolicy:allocationPolicy,wagers:value(wr,[]),
