@@ -480,7 +480,7 @@ async function collectPredictiveStrategies(){
      modeledLossFrequency:null,expectedNetDollars:net,
      estimatedMaxDebitDollars:price+fee,allowed:true}];
  });
- const ideas=rankStrategies(sports.filter(x=>x.lateGame?.direction&&x.sourceVerified&&
+ const ideas=rankStrategies([...totalIdeas,...sports.filter(x=>x.lateGame?.direction&&x.sourceVerified&&
    x.marketMatchVerified&&x.market&&Number.isFinite(Number(x.externalWinProbability))&&
    x.externalWinProbability>=.85&&x.modelPlayId)
    .map(x=>{
