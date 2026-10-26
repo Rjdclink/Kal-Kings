@@ -494,7 +494,7 @@ async function collectPredictiveStrategies(){
        modeledLossFrequency:1-p,estimatedMaxDebitDollars:ask+fee,
        expectedNetDollars:edge,allowed:Number.isFinite(edge)&&edge>.02};
    })],{max:12});
- return {cryptoSignals:cryptos.length,sportsSignals:sports.length,stored:rows.length,ideas};
+ return {cryptoSignals:cryptos.length,sportsSignals:sports.length,stored:rows.length,ideas,universeScanned:universeResponse.status==='fulfilled'?universeResponse.value.scanned:0};
 }
 async function getPredictiveStrategies(){
  const rows=await sql(`SELECT DISTINCT ON (asset,strategy) asset,strategy,direction,status,
