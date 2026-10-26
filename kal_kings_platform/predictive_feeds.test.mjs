@@ -173,3 +173,5 @@ test('official Kalshi crypto floor strike replaces five-minute proxy as the trad
  assert.equal(signal.model?.trials,5000);
  assert.ok(signal.modeledWinProbability>.85);
 });
+
+test('failed independent price venues are recorded, not counted as agreeing votes',async()=>{const fetcher=async url=>{if(!url.includes('coinbase.com')&&!url.includes('kalshi.com'))throw Error('Venue network blocked');return mockFetch(url)};const [signal]=await fetchCryptoSignals({fetcher,now,symbols:['BTC']});assert.ok(signal.missingSources.some(x=>x.source==='gemini'&&x.reason==='PROVIDER_FAILURE'));assert.equal(signal.sources,1)});
