@@ -102,3 +102,16 @@ test('uncertain directional execution ends the cycle without any paired-arbitrag
  const result=await f.run(runInput);
  assert.equal(result.status,'DIRECTIONAL_UNCERTAIN');assert.equal(f.calls.length,0);
 });
+
+test('worker records why it found no opportunity, including broad market survey breadth',async()=>{
+ let last=null;
+ const f=fixture({
+   fetchQuotes:async()=>[{...q,noAsk:.65}],
+   scanPredictive:async()=>({ideas:[],cryptoSignals:6,sportsSignals:0,universeScanned:500}),
+   recordScan:async x=>{last=x;}
+ });
+ const result=await f.run(runInput);
+ assert.equal(result.status,'NO_QUALIFYING_KALSHI_TRADE');
+ assert.equal(last.status,'NO_QUALIFYING_KALSHI_TRADE');
+ assert.equal(last.universeScanned,500);
+});
