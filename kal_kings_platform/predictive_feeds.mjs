@@ -1,6 +1,7 @@
 /** Kal Kings independent live signal-feed adapters. Read-only; never place orders. */
 import {cryptoConsensus,assessLateGame,assessTotals} from './predictive_strategies.mjs';
 import {technicalIndicators,assessCryptoRegime,matchSportsOutcome,assessTotalsProjection} from './strategy_optimizer.mjs';
+import {additionalSpotCandles} from './spot_venue_adapters.mjs';
 const KALSHI='https://external-api.kalshi.com/trade-api/v2';
 const ESPN='https://site.api.espn.com/apis/site/v2/sports';
 const integer=n=>Number.isFinite(Number(n))?Number(n):null;
