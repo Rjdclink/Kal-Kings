@@ -16,7 +16,9 @@ function fixture(override={}){
   return [];
  };
  const deps={sql,fetchMarket:async()=>({id:ticker,...idea.market,yesAsk:.7,yesDepth:12}),
-  fetchOrderbook:async()=>book,submit:async o=>{orders.push(o);return {order_id:'abc',fill_count:'1.00'};},
+  fetchOrderbook:async()=>book,
+  fetchFeeSchedule:async()=>({feeType:'quadratic',feeMultiplier:1}),
+  submit:async o=>{orders.push(o);return {order_id:'abc',fill_count:o.count};},
   now:()=>now,createId:()=> '123e4567-e89b-42d3-a456-426614174000',
   ...override};
  return {runner:makeDirectionalRunner(deps),orders,rows};
@@ -70,4 +72,31 @@ test('valid multiple-unit total order is not vetoed by unrelated two-percent ris
  const o=await f.runner({ideas:[totalIdea],account:{balance:15,holdings:[],positionsComplete:true,status:'VERIFIED'}});
  assert.equal(o.status,'FILLED');
  assert.ok(o.contracts>1);
+});
+
+test('verified three-unit ninety-nine-cent total captures tiny positive aggregate margin',async()=>{
+ const totalIdea={id:'tiny',strategy:'TOTAL_ALREADY_OVER',eventKey:'NFL:2026-10-26:DAL:PHI',
+   updatedAt:new Date(now).toISOString(),sourceVerified:true,marketMatchVerified:true,
+   market:{id:'KXNFLTOTAL-26OCT26DALPHI-44',ticker:'KXNFLTOTAL-26OCT26DALPHI-44'},
+   game:{sport:'NFL',state:'in',homeScore:31,awayScore:17,
+     homeAbbreviation:'PHI',awayAbbreviation:'DAL',date:'2026-10-26',
+     updatedAt:new Date(now).toISOString()}};
+ const orders={orderbook_fp:{yes_dollars:[['.9800','10.00']],no_dollars:[['.0100','20.00']]}};
+ const f=fixture({fetchOrderbook:async()=>orders,
+   fetchMarket:async ticker=>({id:ticker,ticker,status:'active',
+     floorStrike:44.5,closeTime:new Date(now+180000).toISOString(),
+     observedAt:new Date(now).toISOString(),
+     rulesPrimary:'If Dallas and Philadelphia collectively score more than 44.5 points, then market resolves to Yes.'})});
+ const out=await f.runner({ideas:[totalIdea],
+   account:{balance:15,holdings:[],positionsComplete:true,status:'VERIFIED'}});
+ assert.equal(out.status,'FILLED');
+ assert.equal(out.contracts,3);
+ assert.ok(out.expectedNetDollars>0);
+ assert.equal(f.orders[0].count,'3.00');
+});
+test('unknown Kalshi series fee structure cannot approve tiny apparent margin',async()=>{
+ const f=fixture({fetchFeeSchedule:async()=>({feeType:'flat',feeMultiplier:null})});
+ const out=await f.runner({ideas:[idea],account:{status:'VERIFIED',balance:15,holdings:[],positionsComplete:true}});
+ assert.equal(f.orders.length,0);
+ assert.equal(out.reason,'FEE_SCHEDULE_UNVERIFIED');
 });
