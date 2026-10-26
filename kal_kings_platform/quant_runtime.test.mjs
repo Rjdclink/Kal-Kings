@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {assessLiveKalshiEntry, historyForExit, summarizeQuantState} from './quant_runtime.mjs';
+import {assessLiveKalshiEntry, historyForExit, summarizeQuantState,MAX_MODELED_LOSS_FREQUENCY} from './quant_runtime.mjs';
 const at=new Date('2026-10-24T20:20:00Z').toISOString();
 const market={id:'KXNFLGAME-TEST-BUF',yesAsk:.37,noAsk:.38,yesDepth:10,noDepth:10,observedAt:at};
 const crossed={orderbook_fp:{yes_dollars:[['0.64','10.00']],no_dollars:[['0.64','10.00']]}};
@@ -40,3 +40,5 @@ test('quant diagnostics never label absent calibration as live verified accuracy
  const state=summarizeQuantState({historySamples:0,executionSamples:0,decisions:[]});
  assert.equal(state.confidence,'UNCALIBRATED');assert.equal(state.verifiedExpectedProfit,null);
 });
+
+test('modeled loss-frequency ceiling is 15 percent',()=>{assert.equal(MAX_MODELED_LOSS_FREQUENCY,.15)});
