@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {assessAlreadyExceededTotal} from './total_strategy.mjs';
+import {assessAlreadyExceededTotal,verifyExceededTotal} from './total_strategy.mjs';
 const now=Date.parse('2026-10-26T12:00:00Z');
 const game={id:'abc',sport:'NFL',state:'in',homeScore:30,awayScore:17,
   period:4,clockSeconds:300,updatedAt:new Date(now-1000).toISOString(),
@@ -34,3 +34,5 @@ test('cannot auto-order unverified or already-held event contracts',()=>{
  assert.equal(assessAlreadyExceededTotal({game,market,bankroll:15,feePerContract:.02,now,
    holdings:[{ticker:market.ticker,position:1}]}).allowed,false);
 });
+
+test('exceeded-total evidence is verifiable without loading account funds',()=>{assert.equal(verifyExceededTotal({game,market,now}).eligible,true)});
