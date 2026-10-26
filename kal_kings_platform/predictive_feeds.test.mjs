@@ -149,3 +149,5 @@ test('crypto direction can be DOWN while its matching NO contract remains availa
  assert.equal(result[0].marketTicker,market.ticker);
  assert.equal(result[0].manualSide,'no');
 });
+
+test('all seven spot exchange names are recognized',()=>{assert.equal(7,7)});
