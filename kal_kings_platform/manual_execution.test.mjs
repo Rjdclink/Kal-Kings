@@ -104,3 +104,15 @@ test('uncertain orders are reconciled from read-only exchange order history by c
  assert.equal(seen.confirmed,1);
  assert.equal(f.intents.get(p.intentId).status,'FILLED');
 });
+
+test('a disclosed one-cent limit cushion accommodates normal live quote movement without a second click',async()=>{
+ let reads=0;
+ const moving={orderbook_fp:{yes_dollars:[['0.4500','30.00']],no_dollars:[['0.5200','30.00']]}};
+ const f=setup({fetchOrderbook:async()=>{reads++;return reads===1?book:moving}});
+ const p=await f.executor.preview({ticker:market.id,side:'yes',count:1});
+ assert.equal(p.currentBestAsk,.47);
+ assert.equal(p.limitPrice,.48);
+ const receipt=await f.executor.execute({intentId:p.intentId});
+ assert.equal(receipt.status,'FILLED');
+ assert.equal(f.orders[0].price,'0.4800');
+});
