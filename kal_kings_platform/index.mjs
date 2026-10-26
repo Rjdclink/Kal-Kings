@@ -439,7 +439,7 @@ const universeScanner=makeUniverseScanner({sql,fetcher:path=>external(KALSHI_PUB
 async function collectPredictiveStrategies(){
  const now=Date.now();
  const [cryptoResponse,sportsResponse,universeResponse]=await Promise.allSettled([
-   fetchCryptoSignals({now}),fetchSportsSignals({now})
+   fetchCryptoSignals({now}),fetchSportsSignals({now}),universeScanner.scan()
  ]);
  const cryptos=cryptoResponse.status==='fulfilled'?cryptoResponse.value:[];
  const sports=sportsResponse.status==='fulfilled'?sportsResponse.value:[];
