@@ -164,7 +164,7 @@ export function calculateCryptoWindowReference(spot,closeTime){
  return {referencePrice:median(opens),spotPrice:median(current),
   sourceCount:opens.length,source:'SPOT_OPEN_PROXY_NOT_CF_BENCHMARKS'};
 }
-export async function fetchCryptoSignals({fetcher=fetch,now=Date.now(),symbols=['BTC','ETH','SOL','XRP','DOGE','ADA']}={}){
+export async function fetchCryptoSignals({fetcher=fetch,now=Date.now(),symbols=['BTC','ETH','SOL','XRP','DOGE','ADA'],runSimulation=true}={}){
  const all=await Promise.all(symbols.filter(x=>candidates[x]).map(async symbol=>{
    const [s,m]=await Promise.allSettled([
     spotMomentum(fetcher,symbol,now),
@@ -196,7 +196,7 @@ export async function fetchCryptoSignals({fetcher=fetch,now=Date.now(),symbols=[
      .sort((a,b)=>Date.parse(a.closeTime)-Date.parse(b.closeTime));
    const market=available[0]||null;
    const reference=market?calculateCryptoWindowReference(spot,market.closeTime):null;
-   const model=reference&&consensus.allocationFraction>0?
+   const model=runSimulation&&reference&&consensus.allocationFraction>0?
      runCryptoMonteCarlo({symbol,spotPrice:reference.spotPrice,
       referencePrice:reference.referencePrice,
       minutesRemaining:(Date.parse(market.closeTime)-now)/60000,
