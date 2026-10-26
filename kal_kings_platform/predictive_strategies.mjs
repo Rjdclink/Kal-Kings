@@ -51,8 +51,8 @@ export function cryptoConsensus(rows,{symbol,now=Date.now(),minSources=5,minRetu
  * outcome probabilities; market votes or past spot momentum are insufficient.
  */
 export function planDirectionalTrade({consensus,market,bankroll,feePerContract,model,now=Date.now(),lossFrequencyLimit=.15}={}){
- if(!consensus||!['UP','DOWN'].includes(consensus.direction)||consensus.sources<3||
-   consensus.agreement<.75)return denied('NO_INDEPENDENT_CONSENSUS');
+ if(!consensus||!['UP','DOWN'].includes(consensus.direction)||consensus.agreeingSources<5||
+   !(consensus.allocationFraction>=.2))return denied('NO_INDEPENDENT_CONSENSUS');
  const asset=String(consensus.symbol||'').toUpperCase(),series='KX'+asset+'15M';
  if(!['BTC','ETH','SOL','XRP','DOGE','ADA'].includes(asset)||market?.seriesTicker!==series||
    !String(market?.ticker||'').startsWith(series+'-')||!['open','active'].includes(market.status))
@@ -62,18 +62,18 @@ export function planDirectionalTrade({consensus,market,bankroll,feePerContract,m
    !/(at least|greater than or equal|higher than)/i.test(rules))
    return denied('UNVERIFIED_SETTLEMENT_RULES');
  const age=safeAge(market.observedAt,now),until=Date.parse(market.closeTime||'')-now;
- if(!finite(age)||age<0||age>3000||!finite(until)||until<90000||until>900000)
+ if(!finite(age)||age<0||age>3000||!finite(until)||until<10000||until>900000)
    return denied('STALE_OR_INVALID_TRADING_WINDOW');
  const side=consensus.direction==='UP'?'yes':'no',ask=number(market[side+'Ask']),
    depth=number(market[side+'Depth']),cash=number(bankroll),fee=number(feePerContract);
  if(!finite(ask)||ask<=0||ask>=1||!finite(depth)||depth<1||!finite(cash)||cash<=0||
     !finite(fee)||fee<0)return denied('INVALID_EXECUTABLE_PRICE_OR_CASH');
- if(!model||model.validated!==true||model.symbol!==asset||model.direction!==consensus.direction||
+ if(!model||!(model.validated===true||model.status==='ESTIMATED')||
+    model.symbol!==asset||model.direction!==consensus.direction||
     model.horizonMinutes!==15||model.settlementBasis!=='CF_BENCHMARKS_RTI'||
-    !finite(number(model.sampleCount))||number(model.sampleCount)<100||
-    !finite(number(model.holdoutCount))||number(model.holdoutCount)<30||
-    !finite(safeAge(model.validatedAt,now))||safeAge(model.validatedAt,now)<0||
-    safeAge(model.validatedAt,now)>24*3600000||
+    !finite(safeAge(model.observedAt||model.validatedAt,now))||
+    safeAge(model.observedAt||model.validatedAt,now)<0||
+    safeAge(model.observedAt||model.validatedAt,now)>30000||
     !finite(number(model.probability)))
    return denied('INDEPENDENT_PROBABILITY_NOT_VALIDATED',{consensus});
  const p=number(model.probability),price=ask+fee,loss=1-p,edge=p-price;
@@ -82,14 +82,14 @@ export function planDirectionalTrade({consensus,market,bankroll,feePerContract,m
  if(edge<=.02)return denied('NO_VERIFIED_POSITIVE_EDGE',{expectedEdge:round(edge)});
  // Preserve small-bankroll protection. A single minimum unit can exceptionally
  // exceed the ordinary 0.75% bankroll limit, but never 25% of free cash.
- const ordinary=cash*.0075,maxMinimum=cash*.25,unit=price;
+ const ordinary=cash*consensus.allocationFraction,maxMinimum=ordinary,unit=price;
  if(unit>cash||unit>maxMinimum)return denied('INSUFFICIENT_RISK_BUDGET');
- const count=Math.max(1,Math.min(10,Math.floor(depth),Math.floor(ordinary/unit)||1));
+ const count=Math.max(1,Math.min(50,Math.floor(depth),Math.floor(ordinary/unit)||1));
  if(unit*count>cash+1e-8||unit*count>Math.max(ordinary,unit)+1e-8)
    return denied('INSUFFICIENT_RISK_BUDGET');
  return {allowed:true,reason:'VALIDATED_DIRECTIONAL_ENTRY',strategy:'CRYPTO_DIRECTIONAL_CONSENSUS',
    ticker:market.ticker,side,contracts:count,price:ask,feePerContract:fee,
-   estimatedMaxDebitDollars:round(count*price,2),modeledWinProbability:round(p),
+   estimatedMaxDebitDollars:round(count*(price+fee),4),modeledWinProbability:round(p),
    modeledLossFrequency:round(loss),expectedNetDollars:round(count*edge,4),
    sources:consensus.observations.map(x=>x.source),confidenceBasis:'INDEPENDENT_VALIDATED_MODEL',
    note:'Estimated edge is not guaranteed profit. CF Benchmarks settlement may differ from spot.'};
