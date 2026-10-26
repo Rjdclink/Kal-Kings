@@ -35,7 +35,8 @@ export function makeDirectionalLifecycle({
      out.confirmedSettlements++;continue;
    }
    if(trade.status!=='FILLED'){out.pendingReview++;continue;}
-   const count=Math.floor(Number(trade.filled_count)),held=holdings.get(trade.ticker);
+   const count=Math.floor(Number(trade.filled_count)),signedHeld=holdings.get(trade.ticker);
+   const held=trade.side==='no'?-signedHeld:signedHeld;
    // Exact ticker and confirmed Kalshi exposure are both required.
    if(!Number.isInteger(count)||count<1||!finite(held)||held<count){
      out.pendingReview++;continue;
