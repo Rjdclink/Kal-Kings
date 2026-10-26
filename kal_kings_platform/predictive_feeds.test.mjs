@@ -38,3 +38,13 @@ test('live sports lead and over/under context use ESPN scores and known injury s
  assert.equal(rows.length,1);assert.equal(rows[0].lateGame.direction,'Philadelphia Eagles');
  assert.equal(rows[0].totals.eligibleForAutomation,false);
 });
+
+test('Kalshi API active market status remains an eligible live matching contract',async()=>{
+ const liveFetch=async url=>{
+   const r=await mockFetch(url);
+   if(!url.includes('kalshi.com'))return r;
+   return {ok:true,json:async()=>({events:[{markets:[{...market,status:'active'}]}]})};
+ };
+ const result=await fetchCryptoSignals({fetcher:liveFetch,now,symbols:['BTC']});
+ assert.equal(result[0].marketTicker,market.ticker);
+});
