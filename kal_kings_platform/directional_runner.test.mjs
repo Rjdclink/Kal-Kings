@@ -100,3 +100,18 @@ test('unknown Kalshi series fee structure cannot approve tiny apparent margin',a
  assert.equal(f.orders.length,0);
  assert.equal(out.reason,'FEE_SCHEDULE_UNVERIFIED');
 });
+
+test('a confirmed zero-fill on one market immediately tries another independently qualified market',async()=>{
+ const second={...idea,id:'second',eventKey:'NFL:2026-10-26:TB:ATL',
+    market:{...idea.market,ticker:'KXNFLGAME-26OCT26TBATL-ATL'}};
+ let submissions=0;
+ const f=fixture({submit:async order=>{
+   f.orders.push(order);submissions++;
+   return {order_id:'receipt-'+submissions,fill_count:submissions===1?'0.00':'1.00'};
+ }});
+ const out=await f.runner({ideas:[idea,second],
+   account:{status:'VERIFIED',balance:15,holdings:[],positionsComplete:true}});
+ assert.equal(out.status,'FILLED');
+ assert.equal(f.orders.length,2);
+ assert.equal(f.orders[1].ticker,second.market.ticker);
+});
