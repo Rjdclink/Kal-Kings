@@ -27,6 +27,7 @@ import {planOneTimeMicroOrder,interpretMicroReceipt} from './live_trade_test.mjs
 
 const HTML=readFileSync(new URL('./dashboard.html',import.meta.url),'utf8');
 const KALSHI='https://external-api.kalshi.com';
+const KALSHI_PUBLIC='https://api.elections.kalshi.com';
 const POLY='https://gateway.polymarket.us';
 const SPORTS=['americanfootball_nfl','basketball_nba','baseball_mlb','icehockey_nhl'];
 const KALSHI_SPORTS_SERIES=['KXNFLGAME','KXNBAGAME','KXMLBGAME','KXNHLGAME','KXCFBGAME','KXCBBGAME','KXEPLGAME','KXMLSGAME'];
@@ -93,7 +94,7 @@ export async function publicKalshi(){
   // same NFL/NBA markets. A filtered sports event may have no category field.
   const fetchedAt=iso();
   const pages=await Promise.allSettled(KALSHI_SPORTS_SERIES.map(async series=>({
-    series,data:await external(`${KALSHI}/trade-api/v2/events?series_ticker=${encodeURIComponent(series)}&limit=200&status=open&with_nested_markets=true`),
+    series,data:await external(`${KALSHI_PUBLIC}/trade-api/v2/events?series_ticker=${encodeURIComponent(series)}&limit=200&status=open&with_nested_markets=true`),
   })));
   if(pages.every(item=>item.status==='rejected'))throw Error('Kalshi sports markets unavailable');
   return collectKalshiSports(pages.filter(item=>item.status==='fulfilled').map(item=>item.value),fetchedAt,LIMIT);
@@ -241,7 +242,7 @@ async function getAutoOrders(){
   price:Number(x.limit_price),filled:Number(x.filled_count),createdAt:x.created_at,updatedAt:x.updated_at}));
 }
 async function freshKalshiMarket(ticker){
-  const body=await external(`${KALSHI}/trade-api/v2/markets/${encodeURIComponent(ticker)}`);
+  const body=await external(`${KALSHI_PUBLIC}/trade-api/v2/markets/${encodeURIComponent(ticker)}`);
   const m=body.market;
   if(!m||m.ticker!==ticker||!['active','open'].includes(m.status))return null;
   return {id:m.ticker,ticker:m.ticker,status:m.status,closeTime:m.close_time,
@@ -296,7 +297,7 @@ async function automaticallyHedgeAcceptedDraftKingsTicket(ticket){
 // Historical snapshots are observations, never claims of executed trades.
 async function getKalshiOrderbook(ticker){
  if(!/^[A-Z0-9_-]{4,128}$/.test(ticker||''))throw Error('Invalid Kalshi ticker');
- return external(`${KALSHI}/trade-api/v2/markets/${encodeURIComponent(ticker)}/orderbook?depth=30`);
+ return external(`${KALSHI_PUBLIC}/trade-api/v2/markets/${encodeURIComponent(ticker)}/orderbook?depth=30`);
 }
 async function recordQuantQuote(market){
  const id=str(market?.id,128),bid=Number(market?.yesBid),ask=Number(market?.yesAsk);
