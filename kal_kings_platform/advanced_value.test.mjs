@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {matchSportsOutcome,assessKalshiValue,rankStrategies,assessTotalsProjection,adaptiveExitThresholds} from './strategy_optimizer.mjs';
+import {matchSportsOutcome,assessKalshiValue,rankStrategies,assessTotalsProjection,adaptiveExitThresholds,bidVolatilityPct} from './strategy_optimizer.mjs';
 const NOW=Date.parse('2026-10-26T12:00:00Z');
 const market={ticker:'KXNFLGAME-26OCT26DALPHI-PHI',status:'active',yesAsk:.75,noAsk:.26,yesDepth:10,noDepth:10,observedAt:new Date(NOW-500).toISOString()};
 test('exact game outcome requires both teams and date',()=>{
@@ -35,3 +35,5 @@ test('trailing exit policy adapts to volatility without discarding stop protecti
  assert.ok(b.trailingPercent>a.trailingPercent);
  assert.ok(b.stopLossPercent<=15);
 });
+
+test('adaptive stop volatility is measured from observed executable bids rather than a fixed guess',()=>{const rows=[.75,.74,.70,.69,.73,.67].map((bid,i)=>({bid,observedAt:new Date(Date.parse('2026-10-26T12:00:00Z')+i*1000).toISOString()}));assert.ok(bidVolatilityPct(rows)>0);assert.equal(bidVolatilityPct(rows.slice(0,2)),null)});
