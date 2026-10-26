@@ -460,7 +460,7 @@ async function collectPredictiveStrategies(){
  const now=Date.now();
  const [cryptoResponse,sportsResponse,universeResponse]=await Promise.allSettled([
    memo('predictiveCrypto',30000,()=>fetchCryptoSignals({now:Date.now()})),
-   fetchSportsSignals({now}),universeScanner.scan()
+   fetchSportsSignals({now}),memo('universe_scan',30000,()=>universeScanner.scan())
  ]);
  const cryptos=cryptoResponse.status==='fulfilled'?cryptoResponse.value:[];
  const sports=sportsResponse.status==='fulfilled'?sportsResponse.value:[];
@@ -602,7 +602,7 @@ async function releaseTradingLease(invocationId){
 const runSolo=makeSoloRunner({fetchAccount:getKalshiAccount,fetchQuotes:publicKalshi,
  fetchMarket:freshKalshiMarket,monitorPositions:monitorKalshiPortfolio,
  quantRiskGate,recordSnapshots:recordQuantSamples,
- scanPredictive:()=>memo('predictive_scan',25000,collectPredictiveStrategies),
+ scanPredictive:collectPredictiveStrategies,
  monitorDirectional:monitorDirectionalPositions,executeDirectional:runDirectional,
  acquireScanLease:acquireTradingLease,releaseScanLease:releaseTradingLease,
  recordScan:recordScannerStatus,
