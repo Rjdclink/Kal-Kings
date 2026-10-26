@@ -462,10 +462,18 @@ async function collectPredictiveStrategies(){
      FROM jsonb_to_recordset($1::jsonb) AS p(asset text,strategy text,direction text,status text,
        source_count integer,market_ticker text,details jsonb)`,[JSON.stringify(rows)]);
  }
- const ideas=sports.filter(x=>x.lateGame?.direction&&x.sourceVerified&&
+ const ideas=rankStrategies(sports.filter(x=>x.lateGame?.direction&&x.sourceVerified&&
    x.marketMatchVerified&&x.market&&Number.isFinite(Number(x.externalWinProbability))&&
    x.externalWinProbability>=.85&&x.modelPlayId)
-   .map(x=>({...x,strategy:'LATE_GAME_LEAD',probability:x.externalWinProbability}));
+   .map(x=>{
+     const p=Number(x.externalWinProbability),ask=Number(x.market?.yesAsk);
+     const fee=Number.isFinite(ask)&&ask>0&&ask<1?
+       Math.max(estimatedKalshiFee(1,ask),estimatedKalshiFee(1,.5)):Infinity;
+     const edge=p-ask-fee;
+     return {...x,strategy:'LATE_GAME_LEAD',probability:p,
+       modeledLossFrequency:1-p,estimatedMaxDebitDollars:ask+fee,
+       expectedNetDollars:edge,allowed:Number.isFinite(edge)&&edge>.02};
+   }));
  return {cryptoSignals:cryptos.length,sportsSignals:sports.length,stored:rows.length,ideas};
 }
 async function getPredictiveStrategies(){
