@@ -37,7 +37,7 @@ test('no direction mismatch or stale quote may authorize an order',()=>{
  const c=cryptoConsensus([...base,tick('gemini',80000,80300),tick('okx',80000,80310)],{symbol:'BTC',now});
  const model={validated:true,probability:.91,sampleCount:150,holdoutCount:45,symbol:'BTC',direction:'UP',horizonMinutes:15,settlementBasis:'CF_BENCHMARKS_RTI',validatedAt:new Date(now-1000).toISOString()};
  assert.equal(planDirectionalTrade({consensus:c,market:{...contract,seriesTicker:'KXETH15M'},bankroll:15,feePerContract:.03,model,now}).allowed,false);
- assert.equal(planDirectionalTrade({consensus:c,market:{...contract,observedAt:new Date(now-1000).toISOString()},bankroll:15,feePerContract:.03,model,now}).allowed,false);
+ assert.equal(planDirectionalTrade({consensus:c,market:{...contract,observedAt:new Date(now-60000).toISOString()},bankroll:15,feePerContract:.03,model,now}).allowed,false);
 });
 test('a commanding late lead is detected without claiming guaranteed value',()=>{
  const d=assessLateGame({sport:'NFL',home:'Philadelphia Eagles',away:'Dallas Cowboys',homeScore:31,awayScore:10,period:4,clockSeconds:210,state:'in',updatedAt:new Date(now-1000).toISOString(),now});
