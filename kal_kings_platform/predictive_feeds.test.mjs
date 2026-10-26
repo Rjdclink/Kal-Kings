@@ -187,3 +187,5 @@ test('Gemini minute-candle freshness uses its last observed minute, not the five
  const rows=await spotMomentum(fetcher,'BTC',now);
  assert.ok(rows.some(x=>x.source==='gemini'));
 });
+
+test('ESPN scoreboards without situation.lastPlay can still use matching live summary win odds',()=>{const event={id:'401873011',competitions:[{}]};const summary={header:{id:'401873011',competitions:[{status:{type:{state:'in'}}}]},winprobability:[{playId:'4018730113963',homeWinPercentage:.95,tiePercentage:0}]};const model=parseLiveWinProbability(summary,event);assert.equal(model.sourceVerified,true);assert.equal(model.homeProbability,.95);assert.equal(parseLiveWinProbability({...summary,header:{...summary.header,competitions:[{status:{type:{state:'post'}}}]}},event).sourceVerified,false)});
