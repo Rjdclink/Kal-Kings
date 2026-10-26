@@ -195,6 +195,13 @@ export async function fetchCryptoSignals({fetcher=fetch,now=Date.now(),symbols=[
        Number(x.yesAsk)>0&&Number(x.yesAsk)<1&&Number(x.noAsk)>0&&Number(x.noAsk)<1)
      .sort((a,b)=>Date.parse(a.closeTime)-Date.parse(b.closeTime));
    const market=available[0]||null;
+   const reference=market?calculateCryptoWindowReference(spot,market.closeTime):null;
+   const model=reference&&consensus.allocationFraction>0?
+     runCryptoMonteCarlo({symbol,spotPrice:reference.spotPrice,
+      referencePrice:reference.referencePrice,
+      minutesRemaining:(Date.parse(market.closeTime)-now)/60000,
+      volatilityPct:technical?.realizedVolatilityPct??.35,
+      observedAt:new Date(now).toISOString(),now,trials:2500}):null;
    // A public quote and a historical direction ARE actionable for a person
    // to review, but do not by themselves prove a profitable automated order.
    const signalDirection=consensus.direction;
