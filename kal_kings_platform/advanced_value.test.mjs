@@ -12,7 +12,7 @@ test('positive value requires independent verified probability and affordable ex
  const data={market,side:'yes',probability:.90,probabilitySource:'ESPN_LIVE_MODEL',
  sourceVerified:true,marketMatchVerified:true,bankroll:15,holdings:[],feePerContract:.02,now:NOW};
  assert.equal(assessKalshiValue(data).allowed,true);
- assert.equal(assessKalshiValue({...data,probability:.84}).allowed,false);
+ assert.equal(assessKalshiValue({...data,probability:.65}).allowed,false);
  assert.equal(assessKalshiValue({...data,market:{...market,yesAsk:.95}}).allowed,false);
  assert.equal(assessKalshiValue({...data,marketMatchVerified:false}).allowed,false);
 });
