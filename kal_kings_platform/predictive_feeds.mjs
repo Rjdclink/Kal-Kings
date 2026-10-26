@@ -85,7 +85,7 @@ export function selectSportsMarket(event,markets){
 }
 export function selectTotalsMarket(game,markets){
  const prefix=SPORTS_TOTAL_SERIES[game?.sport],date=game?.date;
- if(!prefix||!/^\\d{4}-\\d{2}-\\d{2}$/.test(date||''))return null;
+ if(!prefix||typeof date!=='string'||!Number.isFinite(Date.parse(date+'T12:00:00Z')))return null;
  const [y,m,d]=date.split('-'),code=d+['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][Number(m)-1]+y.slice(-2);
  const a=String(game?.awayAbbreviation||'').toUpperCase(),h=String(game?.homeAbbreviation||'').toUpperCase();
  if(!a||!h||a===h||!Number.isFinite(Number(game?.totalLine)))return null;
