@@ -7,6 +7,7 @@ function fixture(override={}){
  const tables={orders:new Map(),runs:new Set()}; const calls=[];
  const deps={
   fetchAccount:async()=>({balance:100}),fetchQuotes:async()=>[q],fetchMarket:async()=>({...q}),
+  quantRiskGate:async({quote})=>({accepted:true,candidate:{source:'KALSHI_ONLY',marketTicker:quote.id,count:1,yesPrice:.43,noPrice:.51,requiredDollars:.99,netProfitDollars:.01}}),
   sql:async(query,params=[])=>{
     if(query.includes('FROM kal_kings_solo_orders')&&query.includes('status IN'))return [];
     if(query.includes('INSERT INTO kal_kings_solo_runs')){if(tables.runs.has(params[0]))return [];tables.runs.add(params[0]);return [{invocation_id:params[0]}];}
