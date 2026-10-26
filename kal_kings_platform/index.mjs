@@ -672,7 +672,7 @@ async function state(){
   const value=(r,fallback)=>r.status==='fulfilled'?r.value:fallback;
   const [predictive,strategyPerformance,directionalOrders,marketUniverse,scannerStatus]=await Promise.all([
     getPredictiveStrategies().catch(()=>[]),getStrategyPerformance(sql).catch(()=>({status:'UNAVAILABLE'})),
-    getDirectionalOrders(sql).catch(()=>[]),universeScanner.latest().catch(()=>({status:'UNAVAILABLE',scanned:0,research:[]}))]);
+    getDirectionalOrders(sql).catch(()=>[]),universeScanner.latest().catch(()=>({status:'UNAVAILABLE',scanned:0,research:[]})),getScannerStatus().catch(()=>({status:'UNAVAILABLE'}))]);
   const k=value(kr,[]),p=value(pr,[]),d=value(dr,{events:[],issues:['Odds provider unavailable']});
   const account=value(ar,{status:'UNAVAILABLE',balance:null,holdings:[]});
   const bankroll=value(br,{amount:null,updatedAt:null});
