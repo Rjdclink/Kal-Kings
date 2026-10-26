@@ -43,7 +43,7 @@ export function cryptoConsensus(rows,{symbol,now=Date.now(),minSources=5,minRetu
    return {...base,spreadPct:round(spreadPct),agreeingSources:max,agreement:round(max/valid.length),reason:'NO_DIRECTIONAL_CONSENSUS'};
  return {...base,direction,agreeingSources:max,agreement:round(max/valid.length),
    allocationFraction:max>=7?.4:max===6?.3:max===5?.2:0,
-   spreadPct:round(spreadPct),medianPrice:round(median,2),reason:'CONSENSUS_OBSERVED',
+   spreadPct:round(spreadPct),medianPrice:round(median,8),reason:'CONSENSUS_OBSERVED',
    note:'Aligned historical spot momentum; not an estimated chance of future profit.'};
 }
 
