@@ -13,5 +13,6 @@ export function selectCryptoIdea(signal,{now=Date.now()}={}){
   strategy:'CRYPTO_DIRECTIONAL_CONSENSUS',symbol:signal.symbol,
   side:signal.direction==='DOWN'?'no':'yes',market:{ticker},
   probability:p,model,agreeingSources:n,allocationFraction:fraction,
+  referencePrice:Number(signal.reference.referencePrice),referenceVerified:true,
   sourceVerified:true,marketMatchVerified:true,updatedAt:signal.updatedAt};
 }
