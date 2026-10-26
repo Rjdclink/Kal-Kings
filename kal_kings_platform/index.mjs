@@ -869,6 +869,11 @@ export default {
     if(!path.startsWith('/api/'))return error(404,'Not found');
     if(!allowEnvToken(request))return error(401,'Invalid administrator token');
     if(request.method==='GET'&&path==='/api/session')return reply({authenticated:true,service:'Kal Kings'});
+    if(request.method==='POST'&&path==='/api/automation/tick'){
+      const scan=activeScanSlot(Date.now());
+      try{return reply(await runSolo(scan))}
+      catch{return error(503,'Trade scanner unavailable')}
+    }
     try{
       if(request.method==='GET'&&path==='/api/state')return reply(await state());
       if(request.method==='GET'&&path==='/api/tradingview/alerts')return reply({alerts:await getTradingViewAlerts(),configured:await tradingViewEnabled()});
