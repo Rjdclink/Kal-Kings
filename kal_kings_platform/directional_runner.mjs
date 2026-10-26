@@ -87,7 +87,7 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
        probability:idea.externalWinProbability??idea.probability,
        probabilitySource:isCrypto?'CRYPTO_SCENARIO_PROXY':'ESPN_LIVE_MODEL',sourceVerified:true,marketMatchVerified:true,
        bankroll:Number(account.balance),holdings:account.holdings,
-       feePerContract:fee,now:now(),maxLossProbability:.15,
+       feePerContract:fee,now:now(),maxLossProbability:.30,
        minimumEdge:isCrypto?.02:0,
        maxBankrollFraction:isCrypto?Math.min(Number(idea.allocationFraction),Number(finalConsensus.allocationFraction)):null});
    if(!decision.allowed){reason=decision.reason;continue;}
