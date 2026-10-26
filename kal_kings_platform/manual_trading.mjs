@@ -39,7 +39,8 @@ export function planManualKalshiBuy({market,bookResponse,feeSchedule,side,count,
  const fee=Math.max(0,fullDebit-price*count);
  return {allowed:true,reason:'MANUAL_LIMIT_ORDER_PREVIEW',ticker:market.id,side,count,
     limitPrice:price,feeMultiplier,feeType,estimatedFeeDollars:round4(fee),
-    maxDebitDollars:fullDebit,conditionalProfitIfWinDollars:round4(count-fullDebit),
+    maxDebitDollars:fullDebit,maximumRiskBudgetDollars:Math.round(maxBankrollFraction*cash*10000)/10000,
+    conditionalProfitIfWinDollars:round4(count-fullDebit),
     maximumLossIfLoseDollars:fullDebit,quoteObservedAt:market.observedAt,
     marketCloseTime:market.closeTime,priceBasis:'LIVE_EXCHANGE_ORDERBOOK',
     note:'A YES or NO signal is not a verified future outcome. Purchase is speculative and may lose the full debit.'};
