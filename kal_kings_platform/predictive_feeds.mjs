@@ -185,6 +185,7 @@ export async function fetchCryptoSignals({fetcher=fetch,now=Date.now(),symbols=[
    const markets=sourceMarkets.map(k=>({
     ticker:k.ticker,seriesTicker:`KX${symbol}15M`,symbol,status:k.status,
     rulesPrimary:k.rules_primary||'',closeTime:k.close_time,
+    floorStrike:k.floor_strike==null?null:Number(k.floor_strike),
     yesAsk:integer(k.yes_ask_dollars),noAsk:integer(k.no_ask_dollars),
     yesDepth:integer(k.yes_ask_size_fp??k.yes_ask_size),
     noDepth:integer(k.no_ask_size_fp??k.no_ask_size),
