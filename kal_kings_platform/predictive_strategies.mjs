@@ -18,7 +18,7 @@ const sourceSet=new Set(CRYPTO_SOURCE_NAMES);
 /** Direction agreement among THREE separate, fresh USD spot venues.
  * No venue may be counted twice, and source quotes must agree on level.
  */
-export function cryptoConsensus(rows,{symbol,now=Date.now(),minSources=5,minReturnPct=.08,maxAgeMs=30_000,maxSpreadPct=1}={}){
+export function cryptoConsensus(rows,{symbol,now=Date.now(),minSources=5,minReturnPct=.005,maxAgeMs=30_000,maxSpreadPct=1}={}){
  const seen=new Set(),valid=[];
  for(const row of Array.isArray(rows)?rows:[]){
    const source=String(row?.source||'').toLowerCase().trim();
