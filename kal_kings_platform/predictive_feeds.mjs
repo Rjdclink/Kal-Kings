@@ -246,7 +246,10 @@ export async function fetchSportsSignals({fetcher=fetch,now=Date.now(),sports=['
        marketMatchVerified:Boolean(market),market:market||null,
        independentModelSource:probability.sourceVerified?'ESPN_LIVE_MODEL':null,
        modelPlayId:probability.modelPlayId||null,
-       totalProjection,kalshiMarketSource:market?'Kalshi public events':'NONE',
+       totalProjection,totalMarket:totalsMarket||null,
+       totalGame:{...signal.gameContext,date:game.date,
+         homeAbbreviation:game.homeAbbreviation,awayAbbreviation:game.awayAbbreviation},
+       kalshiMarketSource:market?'Kalshi public events':'NONE',
        eventKey:game.date?game.sport+':'+game.date+':'+game.awayAbbreviation+':'+game.homeAbbreviation:null};
    }));
   }catch{return []}
