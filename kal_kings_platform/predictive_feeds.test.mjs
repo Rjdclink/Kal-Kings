@@ -170,6 +170,6 @@ test('official Kalshi crypto floor strike replaces five-minute proxy as the trad
  const [signal]=await fetchCryptoSignals({fetcher,now,symbols:['BTC']});
  assert.equal(signal.reference?.referencePrice,100);
  assert.equal(signal.reference?.exactBenchmarkReference,true);
- assert.equal(signal.model?.trials,2500);
+ assert.equal(signal.model?.trials,5000);
  assert.ok(signal.modeledWinProbability>.85);
 });
