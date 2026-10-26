@@ -438,7 +438,7 @@ const monitorKalshiPortfolio=makeKalshiLifecycle({fetchAccount:getKalshiAccount,
 const universeScanner=makeUniverseScanner({sql,fetcher:path=>external(KALSHI_PUBLIC+'/trade-api/v2'+path),now:Date.now,limit:500});
 async function collectPredictiveStrategies(){
  const now=Date.now();
- const [cryptoResponse,sportsResponse]=await Promise.allSettled([
+ const [cryptoResponse,sportsResponse,universeResponse]=await Promise.allSettled([
    fetchCryptoSignals({now}),fetchSportsSignals({now})
  ]);
  const cryptos=cryptoResponse.status==='fulfilled'?cryptoResponse.value:[];
