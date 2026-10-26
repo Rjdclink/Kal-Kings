@@ -95,10 +95,11 @@ export function matchSportsOutcome(event,market){
 export function assessKalshiValue({
  market,side,probability,probabilitySource,sourceVerified=false,
  marketMatchVerified=false,bankroll,holdings,feePerContract,
- now=Date.now(),maxLossProbability=.15,minimumEdge=0
+ now=Date.now(),maxLossProbability=.15,minimumEdge=0,maxBankrollFraction=null
 }={}){
  const no=(reason,extra={})=>({allowed:false,reason,...extra});
- if(!marketMatchVerified||sourceVerified!==true||probabilitySource!=='ESPN_LIVE_MODEL')
+ if(!marketMatchVerified||sourceVerified!==true||
+   !['ESPN_LIVE_MODEL','CRYPTO_SCENARIO_PROXY'].includes(probabilitySource))
    return no('INDEPENDENT_MODEL_OR_RULES_UNVERIFIED');
  const p=num(probability),cash=num(bankroll),fee=num(feePerContract);
  if(!finite(p)||p<=0||p>=1||p<1-maxLossProbability-1e-9)
@@ -116,11 +117,18 @@ export function assessKalshiValue({
    return no('EXISTING_EVENT_EXPOSURE');
  const debit=px+fee,edge=p-debit;
  if(edge<=Math.max(0,minimumEdge)+1e-9)return no('NO_NET_POSITIVE_EDGE',{edge:round(edge)});
- const budget=Math.min(cash,cash<100?cash*.25:cash*.02);
+ const fraction=probabilitySource==='CRYPTO_SCENARIO_PROXY'?
+   num(maxBankrollFraction):null;
+ if(fraction!==null&&(!finite(fraction)||fraction<.2||fraction>.4))
+   return no('INVALID_CONSENSUS_RISK_TIER');
+ const budget=Math.min(cash,fraction===null?(cash<100?cash*.25:cash*.02):cash*fraction);
  if(debit>budget+1e-9)return no('INSUFFICIENT_RISK_BUDGET');
- const count=cash<100?1:Math.min(Math.floor(depth),Math.floor(cash/debit),Math.max(1,Math.floor(budget/debit)),10);
+ const count=probabilitySource==='CRYPTO_SCENARIO_PROXY'?
+   Math.min(50,Math.floor(depth),Math.floor(budget/debit)):
+   cash<100?1:Math.min(Math.floor(depth),Math.floor(cash/debit),Math.floor(budget/debit),10);
  if(count<1)return no('INSUFFICIENT_CAPITAL');
- return {allowed:true,reason:'INDEPENDENT_VALUE_APPROVED',strategy:'LIVE_SPORTS_VALUE',
+ return {allowed:true,reason:'INDEPENDENT_VALUE_APPROVED',
+   strategy:probabilitySource==='CRYPTO_SCENARIO_PROXY'?'CRYPTO_DIRECTIONAL_CONSENSUS':'LIVE_SPORTS_VALUE',
    ticker:market.ticker,side,contracts:count,limitPrice:px,feePerContract:fee,
    estimatedMaxDebitDollars:round(debit*count,4),
    expectedNetDollars:round(edge*count,4),modeledLossFrequency:round(1-p),
