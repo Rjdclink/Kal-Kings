@@ -670,7 +670,8 @@ async function runCryptoCycle(source='dashboard'){
      status=result.status;ticker=result.ticker||null;lastReason=result.reason||null;
    }
    }
- }catch{status='CRYPTO_SCAN_UNAVAILABLE';lastReason='STAGE_'+stage}
+ }catch(e){status='CRYPTO_SCAN_UNAVAILABLE';
+   lastReason='STAGE_'+stage+':'+(stage==='MAP_CRYPTO_CANDIDATES'?String(e?.message||'Error').replace(/[^A-Za-z0-9:._ -]/g,'').slice(0,90):String(e?.name||'Error'))}
  finally{if(leased)try{await releaseTradingLease(leaseId)}catch{}}
  await sql(`UPDATE kal_kings_crypto_cycles SET status=$2,research_count=$3::integer,
    candidate_count=$4::integer,traded_ticker=$5,last_reason=$6,finished_at=now()
@@ -894,7 +895,7 @@ export default {
       'referrer-policy':'no-referrer','x-frame-options':'DENY',
       'content-security-policy':"default-src 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; worker-src blob: 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co; img-src 'self' data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"}});
     if(request.method==='GET'&&path==='/health'){
-      const health={ok:true,service:'Kal Kings',uiServed:true,storageProvider:'Neon',
+      const health={ok:true,service:'Kal Kings',uiServed:true,storageProvider:'Neon',buildTag:'crypto-reconcile-v33',
         credentialsAvailable:requiredEnv(),liveExecutionEnabled:true,asOf:iso()};
       if(u.searchParams.get('probe')==='1'){
         try{health.probes=await memo('healthDiagnostics',20000,diagnostics);}
