@@ -617,7 +617,12 @@ async function runCryptoCycle(source='dashboard'){
    [String(tick),source]);
  if(!lock.length)return {status:'ALREADY_CHECKED'};
  let status='SCANNER_UNAVAILABLE',scanned=0,candidates=0,ticker=null;
+ const leaseId='crypto-'+tick+'-'+source;
+ let leased=false;
  try{
+   leased=await acquireTradingLease(leaseId);
+   if(!leased)status='SCANNER_BUSY';
+   else{
    const [signals,account]=await Promise.all([
      memo('predictiveCrypto',30000,()=>fetchCryptoSignals({now:Date.now()})),
      getKalshiAccount()
@@ -632,7 +637,9 @@ async function runCryptoCycle(source='dashboard'){
      const result=await runDirectional({ideas,account});
      status=result.status;ticker=result.ticker||null;
    }
+   }
  }catch{status='CRYPTO_SCAN_UNAVAILABLE'}
+ finally{if(leased)try{await releaseTradingLease(leaseId)}catch{}}
  await sql(`UPDATE kal_kings_crypto_cycles SET status=$2,research_count=$3::integer,
    candidate_count=$4::integer,traded_ticker=$5,finished_at=now()
    WHERE tick_key=$1::bigint`,[String(tick),status,String(scanned),String(candidates),ticker]);
