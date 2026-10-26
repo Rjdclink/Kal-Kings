@@ -56,3 +56,18 @@ test('already-exceeded official game total can enter without historical model tr
  assert.equal(output.status,'FILLED');
  assert.equal(f.orders.length,1);assert.equal(f.orders[0].ticker,totalIdea.market.ticker);
 });
+
+test('valid multiple-unit total order is not vetoed by unrelated two-percent risk rule',async()=>{
+ const totalIdea={id:'total',strategy:'TOTAL_ALREADY_OVER',eventKey:'NFL:2026-10-26:DAL:PHI',
+   updatedAt:new Date(now).toISOString(),sourceVerified:true,marketMatchVerified:true,
+   market:{id:'KXNFLTOTAL-26OCT26DALPHI-44',ticker:'KXNFLTOTAL-26OCT26DALPHI-44'},
+   game:{sport:'NFL',state:'in',homeScore:31,awayScore:17,homeAbbreviation:'PHI',awayAbbreviation:'DAL',
+     date:'2026-10-26',updatedAt:new Date(now).toISOString()}};
+ const b={orderbook_fp:{yes_dollars:[['0.8500','20.00']],no_dollars:[['0.1400','25.00']]}};
+ const f=fixture({fetchMarket:async ticker=>({id:ticker,ticker,status:'active',
+   floorStrike:44.5,rulesPrimary:'If Dallas and Philadelphia collectively score more than 44.5 points, then market resolves to Yes.',
+   closeTime:new Date(now+180000).toISOString(),observedAt:new Date(now).toISOString()}),fetchOrderbook:async()=>b});
+ const o=await f.runner({ideas:[totalIdea],account:{balance:15,holdings:[],positionsComplete:true,status:'VERIFIED'}});
+ assert.equal(o.status,'FILLED');
+ assert.ok(o.contracts>1);
+});
