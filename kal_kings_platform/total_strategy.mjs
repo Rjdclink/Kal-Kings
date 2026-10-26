@@ -44,10 +44,10 @@ export function assessAlreadyExceededTotal({
    !finite(fee)||fee<0||!finite(cash)||cash<=0)
    return denied('UNEXECUTABLE_PRICE_OR_CASH');
  const net=1-ask-fee;
- if(net<=.005)return denied('NO_NET_POSITIVE_SETTLEMENT_MARGIN');
+ if(net<=1e-9)return denied('NO_NET_POSITIVE_SETTLEMENT_MARGIN');
  const budget=cash<100?Math.min(cash,cash*.25):Math.min(cash,cash*.02);
  if(ask+fee>budget)return denied('BANKROLL_RISK_BUDGET');
- const count=cash<100?1:Math.min(10,Math.floor(depth),Math.floor(budget/(ask+fee)));
+ const count=Math.min(50,Math.floor(depth),Math.floor(budget/(ask+fee)));
  if(count<1||ask*count+fee*count>cash+1e-8)return denied('CONTRACT_NOT_AFFORDABLE');
  return {allowed:true,strategy:'TOTAL_ALREADY_OVER',reason:'SCORE_ALREADY_OVER_RULES_VERIFIED',
   ticker,side:'yes',contracts:count,limitPrice:ask,feePerContract:fee,
