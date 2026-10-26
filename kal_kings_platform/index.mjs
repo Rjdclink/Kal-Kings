@@ -300,6 +300,24 @@ async function automaticallyHedgeAcceptedDraftKingsTicket(ticket){
 
 // Independent quantitative screening, backed by actual exchange order-book depth.
 // Historical snapshots are observations, never claims of executed trades.
+const kalshiSeriesFeeCache=new Map();
+async function getVerifiedKalshiFeeSchedule(ticker){
+ const series=String(ticker||'').split('-')[0];
+ if(!/^[A-Z0-9_]{4,60}$/.test(series))throw Error('Invalid series identifier');
+ const cached=kalshiSeriesFeeCache.get(series);
+ if(cached&&Date.now()-cached.at<3600000)return cached.schedule;
+ const result=await external(`${KALSHI_PUBLIC}/trade-api/v2/series/${encodeURIComponent(series)}`);
+ const feeType=result?.series?.fee_type;
+ const feeMultiplier=Number(result?.series?.fee_multiplier);
+ if(!['quadratic','quadratic_with_maker_fees',
+     'quadratic_with_combo_maker_fees'].includes(feeType)||
+     !Number.isFinite(feeMultiplier)||feeMultiplier<0||feeMultiplier>4)
+   throw Error('Unverified or unsupported series fee structure');
+ const schedule={feeType,feeMultiplier,source:'OFFICIAL_KALSHI_SERIES'};
+ kalshiSeriesFeeCache.set(series,{schedule,at:Date.now()});
+ return schedule;
+}
+
 async function getKalshiOrderbook(ticker){
  if(!/^[A-Z0-9_-]{4,128}$/.test(ticker||''))throw Error('Invalid Kalshi ticker');
  return external(`${KALSHI_PUBLIC}/trade-api/v2/markets/${encodeURIComponent(ticker)}/orderbook?depth=30`);
