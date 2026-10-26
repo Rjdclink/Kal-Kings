@@ -12,22 +12,25 @@ const round=(n,places=4)=>Number(n.toFixed(places));
 const safeAge=(stamp,now)=>now-Date.parse(stamp||'');
 const denied=(reason,extra={})=>({allowed:false,reason,...extra});
 const sportsAge=(x,now)=>safeAge(x.updatedAt,now);
+export const CRYPTO_SOURCE_NAMES=Object.freeze(['coinbase','kraken','bitstamp','gemini','okx','kucoin','bitfinex']);
+const sourceSet=new Set(CRYPTO_SOURCE_NAMES);
 
 /** Direction agreement among THREE separate, fresh USD spot venues.
  * No venue may be counted twice, and source quotes must agree on level.
  */
-export function cryptoConsensus(rows,{symbol,now=Date.now(),minSources=3,minReturnPct=.08,maxAgeMs=20_000,maxSpreadPct=1}={}){
+export function cryptoConsensus(rows,{symbol,now=Date.now(),minSources=5,minReturnPct=.08,maxAgeMs=30_000,maxSpreadPct=1}={}){
  const seen=new Set(),valid=[];
  for(const row of Array.isArray(rows)?rows:[]){
    const source=String(row?.source||'').toLowerCase().trim();
    const asset=String(row?.symbol||'').toUpperCase().trim();
    const age=safeAge(row?.observedAt,now),open=number(row?.start),close=number(row?.last);
-   if(!source||seen.has(source)||asset!==symbol||!finite(age)||age<0||age>maxAgeMs||
+   if(!sourceSet.has(source)||seen.has(source)||asset!==symbol||!finite(age)||age<0||age>maxAgeMs||
        !finite(open)||!finite(close)||open<=0||close<=0)continue;
    seen.add(source);
    valid.push({source,open,close,returnPct:round((close/open-1)*100,5)});
  }
  const base={symbol,sources:valid.length,direction:'UNKNOWN',agreeingSources:0,agreement:0,
+   allocationFraction:0,totalSupportedSources:7,
    action:'SIGNAL_ONLY',observations:valid,reason:'INSUFFICIENT_INDEPENDENT_SOURCES'};
  if(valid.length<minSources)return base;
  const sorted=valid.map(x=>x.close).sort((a,b)=>a-b),median=sorted[Math.floor(sorted.length/2)];
@@ -36,9 +39,10 @@ export function cryptoConsensus(rows,{symbol,now=Date.now(),minSources=3,minRetu
  const up=valid.filter(x=>x.returnPct>=minReturnPct).length;
  const down=valid.filter(x=>x.returnPct<=-minReturnPct).length;
  const max=Math.max(up,down),direction=up>down?'UP':down>up?'DOWN':'UNKNOWN';
- if(max<minSources||max/valid.length<.75||direction==='UNKNOWN')
+ if(max<minSources||direction==='UNKNOWN')
    return {...base,spreadPct:round(spreadPct),agreeingSources:max,agreement:round(max/valid.length),reason:'NO_DIRECTIONAL_CONSENSUS'};
  return {...base,direction,agreeingSources:max,agreement:round(max/valid.length),
+   allocationFraction:max>=7?.4:max===6?.3:max===5?.2:0,
    spreadPct:round(spreadPct),medianPrice:round(median,2),reason:'CONSENSUS_OBSERVED',
    note:'Aligned historical spot momentum; not an estimated chance of future profit.'};
 }
