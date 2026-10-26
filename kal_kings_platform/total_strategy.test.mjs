@@ -12,7 +12,7 @@ const market={ticker:'KXNFLTOTAL-26OCT26DALPHI-44',status:'active',
 test('verified score past official total allows a positive one-sided market opportunity',()=>{
  const v=assessAlreadyExceededTotal({game,market,bankroll:15,feePerContract:.02,now});
  assert.equal(v.allowed,true);assert.equal(v.strategy,'TOTAL_ALREADY_OVER');
- assert.equal(v.side,'yes');assert.equal(v.contracts,1);
+ assert.equal(v.side,'yes');assert.equal(v.contracts,4);
  assert.ok(v.netIfNormallySettledDollars>0);
 });
 test('a high displayed probability alone is not a clinched total',()=>{
