@@ -42,3 +42,7 @@ test('quant diagnostics never label absent calibration as live verified accuracy
 });
 
 test('modeled loss-frequency ceiling is 15 percent',()=>{assert.equal(MAX_MODELED_LOSS_FREQUENCY,.15)});
+
+test('the global Monte Carlo modeled loss-frequency ceiling is raised to 30 percent',()=>{
+ assert.equal(MAX_MODELED_LOSS_FREQUENCY,.30);
+});
