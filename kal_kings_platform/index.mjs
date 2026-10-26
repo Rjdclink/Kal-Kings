@@ -392,7 +392,13 @@ async function submitSoloOrder(order){
  const res=await fetch(KALSHI+path,{method:'POST',
   headers:{...kalshiHeaders(path,'POST'),'content-type':'application/json'},
   body:JSON.stringify(order),redirect:'error',signal:AbortSignal.timeout(9000)});
- if(!res.ok)throw Error('Kalshi rejected independent order');
+ if(!res.ok){
+   const problem=new Error('Kalshi refused the order');
+   problem.httpStatus=res.status;
+   // Only the HTTP class is used for user-visible diagnostics. Never expose
+   // raw Kalshi response bodies, signatures, or internal account details.
+   throw problem;
+ }
  const payload=await res.json();
  if(!payload||typeof payload.fill_count!=='string')throw Error('Unrecognized Kalshi execution receipt');
  return payload;
