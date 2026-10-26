@@ -435,6 +435,7 @@ const monitorKalshiPortfolio=makeKalshiLifecycle({fetchAccount:getKalshiAccount,
 // Parallel non-trading predictive scan, persisted to Neon for cross-refresh visibility.
 // No inferred price momentum or scoreboard favorite may submit a wager: the
 // current execution route still insists on independently validated price/edge.
+const universeScanner=makeUniverseScanner({sql,fetcher:path=>external(KALSHI_PUBLIC+'/trade-api/v2'+path),now:Date.now,limit:500});
 async function collectPredictiveStrategies(){
  const now=Date.now();
  const [cryptoResponse,sportsResponse]=await Promise.allSettled([
