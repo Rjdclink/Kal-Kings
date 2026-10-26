@@ -2,11 +2,12 @@
 import {estimatedKalshiFee} from './engine.mjs';
 import {normalizeKalshiBook} from './quant.mjs';
 import {assessManagedExit,buildReductionOrder} from './kalshi_manager.mjs';
-import {adaptiveExitThresholds} from './strategy_optimizer.mjs';
+import {adaptiveExitThresholds,bidVolatilityPct} from './strategy_optimizer.mjs';
 const finite=n=>Number.isFinite(Number(n));
 const marketAge=(q,now)=>now-Date.parse(q?.observedAt||'');
 export function makeDirectionalLifecycle({
- sql,fetchMarket,fetchOrderbook,fetchSettlements,submit,createId,now=Date.now
+ sql,fetchMarket,fetchOrderbook,fetchSettlements,submit,createId,
+ getBidHistory=async()=>[],recordQuote=async()=>{},now=Date.now
 }){
  return async function monitor(account={}){
   if(account.status!=='MONITORED'||account.positionsComplete!==true||!Array.isArray(account.holdings))
@@ -57,7 +58,12 @@ export function makeDirectionalLifecycle({
    await sql(`UPDATE kal_kings_directional_orders
       SET high_bid=GREATEST(COALESCE(high_bid,0),$2::numeric),updated_at=now()
       WHERE ticker=$1 AND status='FILLED'`,[trade.ticker,String(peak)]);
-   const thresholds=adaptiveExitThresholds({volatilityPct:5,confidence:Number(trade.modeled_probability)});
+   try{await recordQuote({...market,yesBid:bid})}catch{/* Journal is optional for protective exits. */}
+   let historical=[];
+   try{historical=await getBidHistory(trade.ticker)}catch{}
+   const observedVolatility=bidVolatilityPct(historical);
+   const thresholds=adaptiveExitThresholds({volatilityPct:observedVolatility??5,
+     confidence:Number(trade.modeled_probability)});
    const decision=assessManagedExit({entryPrice:Number(trade.entry_price),
      bidPrice:bid,highestBid:peak,availableDepth:best.quantity,
      quantity:count,quoteAgeMs:marketAge(market,now()),
