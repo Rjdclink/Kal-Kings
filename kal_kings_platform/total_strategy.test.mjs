@@ -36,3 +36,24 @@ test('cannot auto-order unverified or already-held event contracts',()=>{
 });
 
 test('exceeded-total evidence is verifiable without loading account funds',()=>{assert.equal(verifyExceededTotal({game,market,now}).eligible,true)});
+
+test('one cent after fees is positive value, with multiple affordable units',()=>{
+ const q={...market,yesAsk:.98,yesDepth:12};
+ const d=assessAlreadyExceededTotal({game,market:q,bankroll:15,feePerContract:.01,now});
+ assert.equal(d.allowed,true);
+ assert.equal(d.contracts,3);
+ assert.ok(d.netIfNormallySettledDollars>=.03-1e-7);
+});
+test('a fraction of a cent is accepted only when truly net positive after the verified fee',()=>{
+ const q={...market,yesAsk:.988,yesDepth:12};
+ const d=assessAlreadyExceededTotal({game,market:q,bankroll:15,feePerContract:.01,now});
+ assert.equal(d.allowed,true);
+ assert.ok(d.netIfNormallySettledDollars>0);
+});
+test('a breakeven or losing over trade is never approved',()=>{
+ for(const ask of [.99,.995]){
+  const d=assessAlreadyExceededTotal({game,market:{...market,yesAsk:ask},
+    bankroll:15,feePerContract:.01,now});
+  assert.equal(d.allowed,false);
+ }
+});
