@@ -154,6 +154,7 @@ export function normalizeScoreboard(data,sport,now=Date.now(),enrichment={}){
      sport,score:`${away.score}-${home.score}`,period,clockSeconds:clock,
      lateGame,totals,windMph:weather.windMph??null,gustMph:weather.gustMph??null,
      injuryCount:injuries.length,verifiedWeather:Boolean(enrichment.weatherByCity?.[city]),
+     weather,injuries,gameContext:game,
      marketMatchVerified:false,eligibleForAutomation:false,
      updatedAt:new Date(now).toISOString()});
  }
@@ -196,7 +197,38 @@ export async function fetchSportsSignals({fetcher=fetch,now=Date.now(),sports=['
     })));
     for(const x of result)if(x.status==='fulfilled')weatherMap[x.value.city]=x.value.weather;
    }
-   return normalizeScoreboard({...j,events:live},sport,now,{weatherByCity:weatherMap,injuriesByTeam:injuryMap});
+   const observations=normalizeScoreboard({...j,events:live},sport,now,{weatherByCity:weatherMap,injuriesByTeam:injuryMap});
+   const markets=await fetchSportsMarkets(fetcher,sport,now);
+   return await Promise.all(observations.map(async signal=>{
+     const event=live.find(x=>x.id===signal.id),contest=event?.competitions?.[0];
+     const home=contest?.competitors?.find(x=>x.homeAway==='home'),
+       away=contest?.competitors?.find(x=>x.homeAway==='away');
+     let probability={sourceVerified:false,homeProbability:null,awayProbability:null};
+     if(signal.lateGame?.direction&&event){
+       try{
+         const summary=await json(fetcher,`${ESPN}/${route[sport]}/summary?event=${encodeURIComponent(event.id)}`);
+         probability=parseLiveWinProbability(summary,event);
+       }catch{/* A missing play-verified ESPN estimate is not authorization. */}
+     }
+     const leader=signal.lateGame?.direction,
+       selected=leader===home?.team?.displayName?home?.team?.abbreviation:
+         leader===away?.team?.displayName?away?.team?.abbreviation:null;
+     const game={sport,date:easternDate(event?.date),
+       homeAbbreviation:home?.team?.abbreviation,awayAbbreviation:away?.team?.abbreviation,
+       selectedAbbreviation:selected};
+     const market=selected?selectSportsMarket(game,markets):null;
+     const prediction=selected===home?.team?.abbreviation?probability.homeProbability:
+       selected===away?.team?.abbreviation?probability.awayProbability:null;
+     const totalProjection=assessTotalsProjection({...signal.gameContext,
+       totalLine:signal.totals.totalLine||Number(contest?.odds?.[0]?.overUnder)||null,
+       weather:signal.weather,injuries:signal.injuries,now});
+     return {...signal,externalWinProbability:prediction,sourceVerified:probability.sourceVerified,
+       marketMatchVerified:Boolean(market),market:market||null,
+       independentModelSource:probability.sourceVerified?'ESPN_LIVE_MODEL':null,
+       modelPlayId:probability.modelPlayId||null,
+       totalProjection,kalshiMarketSource:market?'Kalshi public events':'NONE',
+       eventKey:game.date?game.sport+':'+game.date+':'+game.awayAbbreviation+':'+game.homeAbbreviation:null};
+   }));
   }catch{return []}
  }));
  return outputs.flat().slice(0,30);
