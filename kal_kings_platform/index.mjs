@@ -813,9 +813,11 @@ async function state(){
     memo('crypto',TTL.crypto,cryptoSpot),memo('polyaccount',TTL.polyaccount,polyAccountCheck),getTradingViewAlerts(),memo('trends',TTL.trends,cryptoTrends),tradingViewEnabled(),getAutoOrders(),getSoloOrders(),getPositionWatches(),getBotSettlements(),getQuantDiagnostics()
   ]);
   const value=(r,fallback)=>r.status==='fulfilled'?r.value:fallback;
-  const [predictive,strategyPerformance,directionalOrders,marketUniverse,scannerStatus]=await Promise.all([
+  const [predictive,strategyPerformance,directionalOrders,marketUniverse,scannerStatus,cryptoCycleStatus,manualOrderHistory]=await Promise.all([
     getPredictiveStrategies().catch(()=>[]),getStrategyPerformance(sql).catch(()=>({status:'UNAVAILABLE'})),
-    getDirectionalOrders(sql).catch(()=>[]),universeScanner.latest().catch(()=>({status:'UNAVAILABLE',scanned:0,research:[]})),getScannerStatus().catch(()=>({status:'UNAVAILABLE'}))]);
+    getDirectionalOrders(sql).catch(()=>[]),universeScanner.latest().catch(()=>({status:'UNAVAILABLE',scanned:0,research:[]})),getScannerStatus().catch(()=>({status:'UNAVAILABLE'})),
+    getCryptoCycleStatus().catch(()=>({status:'UNAVAILABLE',scanned:0,candidates:0})),
+    getManualOrders().catch(()=>[])]);
   const k=value(kr,[]),p=value(pr,[]),d=value(dr,{events:[],issues:['Odds provider unavailable']});
   const account=value(ar,{status:'UNAVAILABLE',balance:null,holdings:[]});
   const bankroll=value(br,{amount:null,updatedAt:null});
@@ -853,7 +855,7 @@ async function state(){
    holdings:account.holdings,kalshiStatus:account.status,polymarketStatus:value(polyAuth,{status:'UNAVAILABLE'}).status,crypto:enrichedCrypto,
    tradingView:{configured:value(tvReady,false),alertsReceived:alerts.length,alerts,source:'TradingView configured webhooks; spot indicators computed from Coinbase'},
    quantitativeAnalysis:value(quantReport,{confidence:'DATA_UNAVAILABLE',verifiedExpectedProfit:null,recent:[]}),
-   predictiveStrategies:predictive,strategyPerformance,directionalOrders,marketUniverse,scannerStatus,
+   predictiveStrategies:predictive,strategyPerformance,directionalOrders,marketUniverse,scannerStatus,cryptoCycleStatus,manualOrderHistory,
    config:{...requiredEnv(),oddsFeedConfigured:true,neonStorageReady:br.status==='fulfilled'},
    quotes:{kalshi:k,polymarket:p,draftkings:d.events},
    opportunities,priceGaps,favorites,sportsSignals:signals,riskPolicy:allocationPolicy,wagers:value(wr,[]),
