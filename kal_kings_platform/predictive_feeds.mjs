@@ -27,7 +27,8 @@ function momentum(rows,{symbol,source,now}){
  const latest=sorted.at(-1),first=sorted.at(-4);
  if(!latest||!first||now-latest.time*1000>360000||
    latest.time-first.time<600||latest.time-first.time>1500)return null;
- return {symbol,source,start:first.open,last:latest.close,indicators:technicalIndicators(sorted),observedAt:new Date(now).toISOString(),
+ return {symbol,source,start:first.open,last:latest.close,candles:sorted.slice(-35),
+   indicators:technicalIndicators(sorted),observedAt:new Date(now).toISOString(),
    oldestCandleAt:new Date(first.time*1000).toISOString(),newestCandleAt:new Date(latest.time*1000).toISOString()};
 }
 export async function spotMomentum(fetcher,symbol,now){
