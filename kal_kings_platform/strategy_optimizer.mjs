@@ -171,7 +171,9 @@ export function rankStrategies(rows,{max=10}={}){
  const candidates=(Array.isArray(rows)?rows:[]).filter(x=>
    x?.allowed===true&&finite(num(x.expectedNetDollars))&&num(x.expectedNetDollars)>0&&
    finite(num(x.estimatedMaxDebitDollars))&&num(x.estimatedMaxDebitDollars)>0&&
-   finite(num(x.modeledLossFrequency))&&num(x.modeledLossFrequency)<=.15);
+   ((finite(num(x.modeledLossFrequency))&&num(x.modeledLossFrequency)<=.15)||
+     (x.strategy==='TOTAL_ALREADY_OVER'&&x.conditionalOutcomeVerified===true&&
+       x.modeledLossFrequency==null)));
  const sorted=candidates.map(x=>({...x,
    riskAdjustedScore:round(num(x.expectedNetDollars)/num(x.estimatedMaxDebitDollars),5)}))
    .sort((a,b)=>b.riskAdjustedScore-a.riskAdjustedScore||
