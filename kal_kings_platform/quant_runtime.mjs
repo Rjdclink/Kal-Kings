@@ -5,6 +5,7 @@
 import {riskPolicy,adaptiveCapitalLimit} from './strategy.mjs';
 import {normalizeKalshiBook,optimizePairedDepth,evaluateRiskAdjustedEntry,portfolioExposureGate,
   snapshotBacktest,executionFillCalibration} from './quant.mjs';
+export const MAX_MODELED_LOSS_FREQUENCY=.15;
 const finite=n=>typeof n==='number'&&Number.isFinite(n);
 const safeAge=(timestamp,now)=>now-Date.parse(timestamp||'');
 const rejected=(reason,other={})=>({accepted:false,reason,...other});
@@ -48,7 +49,7 @@ export function assessLiveKalshiEntry({quote,bookResponse,bankroll,holdings=[],p
  if(!risk.accepted)return rejected(risk.reason,{candidate,calibration,backtest,risk:risk.risk,model:mc});
  // A Monte Carlo run excluding all no-fill cases is not an actual execution
  // forecast. Uncalibrated fill rates remain explicitly labeled provisional.
- if(mc.lossFrequency==null||mc.lossFrequency>.10)
+ if(mc.lossFrequency==null||mc.lossFrequency>MAX_MODELED_LOSS_FREQUENCY)
    return rejected('EXCESSIVE_MODELED_LOSS_FREQUENCY',{candidate,calibration,backtest,model:mc,risk:risk.risk});
  return {accepted:true,reason:'EXECUTABLE_QUOTE_RISK_APPROVED',candidate,calibration,backtest,
    model:mc,risk:risk.risk,policy,allocation,
