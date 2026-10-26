@@ -579,15 +579,17 @@ const manualOrders=makeManualExecutor({sql,fetchAccount:getKalshiAccount,
   fetchOrders:fetchKalshiOrdersForTicker,
   submit:submitSoloOrder,createId:randomUUID,now:Date.now});
 async function getManualOrders(){
+ try{await memo('manual_reconcile',30000,()=>manualOrders.reconcilePending())}
+ catch{/* A temporarily unavailable order-history API never turns an unknown fill into a rejection. */}
  const rows=await sql(`SELECT id,ticker,side,contracts,status,
    filled_count::text AS filled_count,limit_price::text AS limit_price,
-   max_debit::text AS max_debit,created_at,updated_at
+   max_debit::text AS max_debit,last_error,created_at,updated_at
    FROM kal_kings_manual_intents
    WHERE status<>'PREVIEW' ORDER BY created_at DESC LIMIT 12`);
  return rows.map(r=>({id:r.id,ticker:r.ticker,side:r.side,
    contracts:Number(r.contracts),status:r.status,filled:Number(r.filled_count),
    price:Number(r.limit_price),maxDebit:Number(r.max_debit),
-   createdAt:r.created_at,updatedAt:r.updated_at}));
+   reason:r.last_error||null,createdAt:r.created_at,updatedAt:r.updated_at}));
 }
 async function recordScannerStatus(result){
  const details={cryptoSignals:result.cryptoSignals||0,sportsSignals:result.sportsSignals||0,
