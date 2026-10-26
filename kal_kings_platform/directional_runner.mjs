@@ -128,7 +128,7 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
       price:(decision.side==='no'?1-decision.limitPrice:decision.limitPrice).toFixed(4),
       time_in_force:'fill_or_kill',self_trade_prevention_type:'taker_at_cross',
       cancel_order_on_pause:true};
-   let status='UNCERTAIN',exchangeId=null,filled=0;
+   let status='UNCERTAIN',exchangeId=null,filled=0,rejectionReason=null;
    try{
      const receipt=await submit(request);
      const n=Number(receipt?.fill_count);
@@ -136,7 +136,16 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
      filled=Number.isFinite(n)&&n>=0?n:0;
      status=!Number.isFinite(n)?'UNCERTAIN':n===0?'NOT_FILLED':
        n>=decision.contracts?'FILLED':'PARTIALLY_FILLED';
-   }catch{/* A network failure can occur after Kalshi accepted the order. */}
+   }catch(e){
+     const code=Number(e?.httpStatus||0);
+     if([400,401,403,404,422,429].includes(code)){
+       status='REJECTED';
+       rejectionReason=code===403||code===401?
+         'KALSHI_ORDER_PERMISSION_DENIED':code===429?
+         'KALSHI_RATE_LIMITED':'KALSHI_ORDER_INVALID';
+     }
+     // Network failures, 409 duplicates, and server timeouts remain uncertain.
+   }
    await sql(`UPDATE kal_kings_directional_orders
       SET status=$2,exchange_order_id=$3,filled_count=$4::numeric,
        high_bid=$5::numeric,updated_at=now() WHERE ticker=$1`,
@@ -144,6 +153,7 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
    // A verified fill count of zero means no position was opened. Look for
    // another independent market immediately, without waiting a full minute.
    if(status==='NOT_FILLED'){reason='CONFIRMED_NO_FILL';continue;}
+   if(status==='REJECTED')return {status,reason:rejectionReason,ticker,filled:0};
    return {status,ticker,contracts:decision.contracts,filled,
      modeledWinProbability:decision.modeledWinProbability,
      estimatedMaxDebitDollars:decision.estimatedMaxDebitDollars,
