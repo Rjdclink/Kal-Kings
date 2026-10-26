@@ -76,24 +76,43 @@ function easternDate(when){
  const get=x=>parts.find(p=>p.type===x)?.value;
  return get('year')+'-'+get('month')+'-'+get('day');
 }
-export function parseLiveWinProbability(summary,event){
- const no={homeProbability:null,awayProbability:null,sourceVerified:false,reason:'ESPN_PLAY_NOT_VERIFIED'};
+export function parseLiveWinProbability(summary,event,now=Date.now()){
+ const unavailable={homeProbability:null,awayProbability:null,sourceVerified:false,reason:'ESPN_PLAY_NOT_VERIFIED'};
  const item=Array.isArray(summary?.winprobability)?summary.winprobability.at(-1):null;
  const home=safe(item?.homeWinPercentage),tie=safe(item?.tiePercentage??0);
- const scorePlay=String(event?.competitions?.[0]?.situation?.lastPlay?.id||''),
-    modelPlay=String(item?.playId||'');
+ const competition=event?.competitions?.[0];
+ const lastScorePlay=String(competition?.situation?.lastPlay?.id||'');
+ const modelPlay=String(item?.playId||'');
  const summaryState=summary?.header?.competitions?.[0]?.status?.type?.state;
- // ESPN's public live scoreboards can omit situation.lastPlay entirely.
- // Use the matched LIVE summary's latest model play when the scoreboard
- // offers no play ID; if both IDs are published they must agree.
- if(!event?.id||String(summary?.header?.id)!==String(event.id)||!modelPlay||
-   (scorePlay&&scorePlay!==modelPlay)||
+ if(!event?.id||String(summary?.header?.id)!==String(event.id)||
+   !modelPlay||(lastScorePlay&&lastScorePlay!==modelPlay)||
    (summaryState&&summaryState!=='in')||
+   (event.status?.type?.state&&event.status.type.state!=='in')||
    home===null||home<0||home>1||tie===null||tie<0||tie>1||
-   home+tie>1.001)return no;
+   home+tie>1.001)return unavailable;
+ if(!lastScorePlay){
+   // Scoreboard situation.lastPlay is frequently omitted by ESPN.
+   // Only substitute a summary play if its game, period, BOTH scores and
+   // recorded wallclock match the fresh live scoreboard.
+   const plays=[...(summary?.drives?.current?.plays||[]),
+     ...(summary?.drives?.previous?.at(-1)?.plays||[]),
+     ...(summary?.plays||[])];
+   const play=plays.find(x=>String(x?.id||'')===modelPlay);
+   const homeTeam=competition?.competitors?.find(x=>x.homeAway==='home');
+   const awayTeam=competition?.competitors?.find(x=>x.homeAway==='away');
+   const scoreboardPeriod=Number(event?.status?.period??competition?.status?.period);
+   const lastPeriod=Number(play?.period?.number);
+   const observed=now-Date.parse(play?.wallclock||'');
+   if(!play||!Number.isFinite(observed)||observed<0||observed>90000||
+     !Number.isFinite(scoreboardPeriod)||!Number.isFinite(lastPeriod)||
+     scoreboardPeriod!==lastPeriod||
+     !homeTeam||!awayTeam||Number(homeTeam.score)!==Number(play.homeScore)||
+     Number(awayTeam.score)!==Number(play.awayScore))
+       return unavailable;
+ }
  return {homeProbability:home,awayProbability:Math.max(0,1-home-tie),
-    sourceVerified:true,source:'ESPN_LIVE_MODEL',modelPlayId:modelPlay,
-    reason:'MATCHED_CURRENT_ESPN_PLAY'};
+   sourceVerified:true,source:'ESPN_LIVE_MODEL',modelPlayId:modelPlay,
+   reason:lastScorePlay?'MATCHED_SCOREBOARD_PLAY':'MATCHED_FRESH_SUMMARY_PLAY'};
 }
 export function selectSportsMarket(event,markets){
  for(const market of Array.isArray(markets)?markets:[]){
