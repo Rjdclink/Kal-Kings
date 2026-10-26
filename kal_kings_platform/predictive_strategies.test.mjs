@@ -86,3 +86,16 @@ test('small-price crypto consensus keeps meaningful price decimals',()=>{
  assert.equal(c.agreeingSources,5);
  assert.ok(Math.abs(c.medianPrice-.09242)<.00001);
 });
+
+test('fresh Monte Carlo crypto model requires no arbitrary 100 training / 30 holdout samples',()=>{
+ const five=[...base,tick('gemini',80000,80305),tick('okx',80000,80300)];
+ const c=cryptoConsensus(five,{symbol:'BTC',now});
+ const forecast={status:'ESTIMATED',symbol:'BTC',direction:'UP',
+   probability:.94,observedAt:new Date(now-1000).toISOString(),
+   settlementBasis:'CF_BENCHMARKS_RTI',horizonMinutes:15};
+ const r=planDirectionalTrade({consensus:c,market:contract,bankroll:15,
+   feePerContract:.02,model:forecast,now});
+ assert.equal(r.allowed,true);
+ assert.equal(r.side,'yes');
+ assert.ok(r.expectedNetDollars>.02);
+});
