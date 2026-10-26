@@ -70,3 +70,29 @@ import {selectTotalsMarket} from './predictive_feeds.mjs';
 test('total matching rejects other games',()=>{assert.equal(selectTotalsMarket({sport:'NFL',date:'2026-10-26',homeAbbreviation:'PHI',awayAbbreviation:'DAL',totalLine:30},[]),null)});
 
 test('exact NFL total line selects correct Kalshi market',()=>{const market={ticker:'KXNFLTOTAL-26OCT26DALPHI-30',status:'active',floorStrike:29.5,yesAsk:.91,rulesPrimary:'If Dallas and Philadelphia collectively score more than 29.5 points, resolves to Yes.'};const e={sport:'NFL',date:'2026-10-26',homeAbbreviation:'PHI',awayAbbreviation:'DAL',totalLine:30};assert.equal(selectTotalsMarket(e,[market]).ticker,market.ticker)});
+
+test('live scoreboard attaches exact market totals and scored outcome for execution evaluation',async()=>{
+ const event={id:'g1',date:'2026-10-26T19:00:00Z',name:'Dallas Cowboys at Philadelphia Eagles',
+  status:{type:{state:'in'},period:4,clock:250},
+  competitions:[{competitors:[
+   {homeAway:'home',score:'31',team:{id:'home1',abbreviation:'PHI',displayName:'Philadelphia Eagles'}},
+   {homeAway:'away',score:'20',team:{id:'away1',abbreviation:'DAL',displayName:'Dallas Cowboys'}}],
+   venue:{indoor:true,address:{city:'Philadelphia'}},odds:[{overUnder:44.5}]}]};
+ const total={ticker:'KXNFLTOTAL-26OCT26DALPHI-44',status:'active',floor_strike:44.5,
+  yes_ask_dollars:'0.89',no_ask_dollars:'0.12',yes_ask_size_fp:'10.00',
+  close_time:new Date(now+300000).toISOString(),
+  rules_primary:'If Dallas and Philadelphia collectively score more than 44.5 points, then market resolves to Yes.'};
+ const fetcher=async url=>{
+  let payload;
+  if(url.endsWith('/scoreboard'))payload={events:[event]};
+  else if(url.endsWith('/injuries'))payload={injuries:[]};
+  else if(url.includes('KXNFLTOTAL'))payload={events:[{markets:[total]}]};
+  else if(url.includes('KXNFLGAME'))payload={events:[]};
+  else payload={events:[]};
+  return {ok:true,json:async()=>payload};
+ };
+ const result=await fetchSportsSignals({fetcher,now,sports:['NFL']});
+ assert.equal(result.length,1);
+ assert.equal(result[0].totalMarket?.ticker,total.ticker);
+ assert.equal(result[0].totalGame?.homeScore,31);
+});
