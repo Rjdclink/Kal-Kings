@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {americanToDecimal, evaluatePair, monteCarlo, rankCandidates, quoteAge, suggestSimilarMarkets} from './engine.mjs';
+import {americanToDecimal, evaluatePair, monteCarlo, rankCandidates, quoteAge, suggestSimilarMarkets, estimatedKalshiBuyDebit} from './engine.mjs';
 
 test('American odds correctly converted', () => {
   assert.equal(americanToDecimal(110), 2.1);
@@ -52,4 +52,18 @@ test('an unexecuted two-leg simulation never counts as profit, loss or success',
   assert.equal(r.expectedProfit,null);
   assert.equal(r.lossFrequency,null);
   assert.equal(r.noFillTrials,500);
+});
+
+test('aggregate retail fee rounding allows positive 99-cent trades in a three-share order',()=>{
+ assert.equal(estimatedKalshiBuyDebit(1,.99),1);
+ assert.equal(estimatedKalshiBuyDebit(3,.99),2.98);
+ assert.equal(estimatedKalshiBuyDebit(1,.98),.99);
+});
+test('debit is a safe bound over better fill prices',()=>{
+ for(let price=.1;price<.99;price+=.03){
+  const limit=Math.round((price+.01)*10000)/10000;
+  const lower=estimatedKalshiBuyDebit(3,price);
+  const upper=estimatedKalshiBuyDebit(3,limit);
+  assert.ok(lower<=upper+1e-8);
+ }
 });
