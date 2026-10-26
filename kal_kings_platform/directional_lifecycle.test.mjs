@@ -39,3 +39,5 @@ test('uncertain sell receipt remains pending and cannot be retried as confirmed 
  assert.ok(result.pendingReview>0);
  assert.equal(result.exitReceiptsConfirmed,0);
 });
+
+test('Kalshi NO contracts have negative signed holdings and remain eligible for protective reduction',async()=>{const no={...tracked,side:'no',entry_price:'.80',high_bid:'.80'};const f=fixture({sql:async(q)=>{if(q.includes('SELECT'))return [no];return [{ticker}]}});const result=await f.run({...account,holdings:[{ticker,position:-1}]});assert.equal(result.exitsSubmitted,1);assert.equal(f.submissions[0].side,'bid');assert.equal(f.submissions[0].reduce_only,true)});
