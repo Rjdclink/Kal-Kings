@@ -6,7 +6,7 @@ export function selectCryptoIdea(signal,{now=Date.now()}={}){
  const model=signal.model,p=Number(signal.modeledWinProbability);
  const age=now-Date.parse(model?.observedAt||'');
  if(model?.status!=='ESTIMATED'||Number(model.trials)<2500||
-    !Number.isFinite(p)||p<.85||p>=1||age<0||age>30000)return null;
+    !Number.isFinite(p)||p<.70||p>=1||age<0||age>30000)return null;
  const ticker=signal.marketTicker;
  if(!ticker.startsWith('KX'+signal.symbol+'15M-')||signal.market?.ticker!==ticker)return null;
  return {id:'crypto:'+ticker,eventKey:ticker.split('-').slice(0,2).join('-'),
