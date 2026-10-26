@@ -583,6 +583,19 @@ async function getScannerStatus(){
    updatedAt:x.updated_at}:{status:'NOT_YET_SCANNED'};
 }
 
+async function acquireTradingLease(invocationId){
+ const rows=await sql(`INSERT INTO kal_kings_scan_lease(name,lease_id,locked_until)
+ VALUES('automation',$1,now()+interval '90 seconds')
+ ON CONFLICT(name) DO UPDATE SET lease_id=EXCLUDED.lease_id,
+    locked_until=EXCLUDED.locked_until
+ WHERE kal_kings_scan_lease.locked_until<now()
+ RETURNING lease_id`,[invocationId]);
+ return rows.length===1&&rows[0].lease_id===invocationId;
+}
+async function releaseTradingLease(invocationId){
+ await sql(`UPDATE kal_kings_scan_lease SET locked_until=now()
+ WHERE name='automation' AND lease_id=$1`,[invocationId]);
+}
 const runSolo=makeSoloRunner({fetchAccount:getKalshiAccount,fetchQuotes:publicKalshi,
  fetchMarket:freshKalshiMarket,monitorPositions:monitorKalshiPortfolio,
  quantRiskGate,recordSnapshots:recordQuantSamples,
