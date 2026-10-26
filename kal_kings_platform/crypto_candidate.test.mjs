@@ -18,3 +18,11 @@ test('four votes, old simulation, or unmatched ticker cannot enter execution',()
  assert.equal(selectCryptoIdea({...signal,model:{...signal.model,observedAt:new Date(now-31000).toISOString()}},{now}),null);
  assert.equal(selectCryptoIdea({...signal,marketTicker:'KXETH15M-26OCT261415-15'},{now}),null);
 });
+
+test('a positive-value 76 percent modeled-win forecast may enter final price validation',()=>{
+ const c=selectCryptoIdea({...signal,modeledWinProbability:.76},{now});
+ assert.equal(c?.side,'no');assert.equal(c?.probability,.76);
+});
+test('model probability below 70 percent does not qualify under broadened forecast cap',()=>{
+ assert.equal(selectCryptoIdea({...signal,modeledWinProbability:.69},{now}),null);
+});
