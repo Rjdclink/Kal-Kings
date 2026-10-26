@@ -6,6 +6,7 @@
 import {estimatedKalshiFee} from './engine.mjs';
 import {normalizeKalshiBook} from './quant.mjs';
 import {assessKalshiValue} from './strategy_optimizer.mjs';
+import {assessAlreadyExceededTotal} from './total_strategy.mjs';
 const validTicker=t=>/^[A-Z0-9_-]{4,128}$/.test(t||'');
 const age=(v,now)=>now-Date.parse(v||'');
 export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,submit,createId,now=Date.now}){
@@ -17,16 +18,13 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,submit,cre
   const pending=await sql(`SELECT ticker FROM kal_kings_directional_orders
     WHERE status IN ('SUBMITTING','UNCERTAIN','PARTIALLY_FILLED','EXIT_SUBMITTING','EXIT_UNCERTAIN') LIMIT 1`);
   if(pending.length)return {status:'HALTED_PENDING_RECONCILIATION'};
-  const counts=await sql(`SELECT COUNT(*)::int AS n FROM kal_kings_directional_orders
-    WHERE created_at>=now()-interval '24 hours'
-      AND status NOT IN ('REJECTED','NOT_FILLED')`);
-  if(Number(counts[0]?.n||0)>=8)return {status:'DAILY_POSITION_LIMIT'};
-  let reason='NO_CURRENT_INDEPENDENT_EDGE';
+  let reason='NO_CURRENT_INDEPENDENT_EDGE',alreadyAttempted=false;
   for(const idea of Array.isArray(ideas)?ideas:[]){
    const m=idea?.market,ticker=m?.ticker;
-   if(idea?.strategy!=='LATE_GAME_LEAD'||idea.sourceVerified!==true||
-      idea.marketMatchVerified!==true||!validTicker(ticker)||
-      typeof idea.modelPlayId!=='string'||!idea.modelPlayId||
+   const isTotal=idea?.strategy==='TOTAL_ALREADY_OVER';
+   if(!['LATE_GAME_LEAD','TOTAL_ALREADY_OVER'].includes(idea?.strategy)||
+      idea.sourceVerified!==true||idea.marketMatchVerified!==true||!validTicker(ticker)||
+      (!isTotal&&(!idea.modelPlayId||typeof idea.modelPlayId!=='string'))||
       !Number.isFinite(age(idea.updatedAt,clock))||age(idea.updatedAt,clock)<0||
       age(idea.updatedAt,clock)>10_000)continue;
    const prefix=ticker.slice(0,ticker.lastIndexOf('-')+1);
@@ -47,14 +45,17 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,submit,cre
    const best=book.yesAsks[0];
    // Reserve the worst per-order unit fee across plausible price improvement.
    const fee=Math.max(estimatedKalshiFee(1,best.price),estimatedKalshiFee(1,.5));
-   const quote={ticker,status:fresh.status,yesAsk:best.price,yesDepth:best.quantity,
-     observedAt:fresh.observedAt};
-   const decision=assessKalshiValue({market:quote,side:'yes',
-     probability:idea.externalWinProbability??idea.probability,
-     probabilitySource:'ESPN_LIVE_MODEL',
-     sourceVerified:true,marketMatchVerified:true,
-     bankroll:Number(account.balance),holdings:account.holdings,
-     feePerContract:fee,now:now(),maxLossProbability:.15});
+   const quote={...fresh,ticker,status:fresh.status,yesAsk:best.price,
+     yesDepth:best.quantity,observedAt:fresh.observedAt};
+   const decision=isTotal?assessAlreadyExceededTotal({
+       game:idea.game,market:quote,bankroll:Number(account.balance),
+       feePerContract:fee,holdings:account.holdings,
+       holdingsComplete:account.positionsComplete,now:now()
+     }):assessKalshiValue({market:quote,side:'yes',
+       probability:idea.externalWinProbability??idea.probability,
+       probabilitySource:'ESPN_LIVE_MODEL',sourceVerified:true,marketMatchVerified:true,
+       bankroll:Number(account.balance),holdings:account.holdings,
+       feePerContract:fee,now:now(),maxLossProbability:.15});
    if(!decision.allowed){reason=decision.reason;continue;}
    if(decision.contracts!==1&&decision.estimatedMaxDebitDollars>Number(account.balance)*.02+1e-8){
      reason='CONCENTRATION_LIMIT';continue;
@@ -68,8 +69,9 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,submit,cre
      ON CONFLICT(ticker) DO NOTHING RETURNING ticker`,
      [ticker,String(idea.eventKey||ticker),idea.strategy,
       String(decision.contracts),String(decision.limitPrice),String(decision.feePerContract),
-      String(decision.modeledWinProbability),String(decision.estimatedMaxDebitDollars),clientId]);
-   if(!inserted.length)return {status:'ALREADY_ATTEMPTED',ticker};
+      decision.modeledWinProbability==null?null:String(decision.modeledWinProbability),
+      String(decision.estimatedMaxDebitDollars),clientId]);
+   if(!inserted.length){alreadyAttempted=true;reason='ALREADY_ATTEMPTED';continue;}
    const request={ticker,client_order_id:clientId,side:'bid',
       count:decision.contracts.toFixed(2),price:decision.limitPrice.toFixed(4),
       time_in_force:'fill_or_kill',self_trade_prevention_type:'taker_at_cross',
@@ -90,8 +92,9 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,submit,cre
    return {status,ticker,contracts:decision.contracts,filled,
      modeledWinProbability:decision.modeledWinProbability,
      estimatedMaxDebitDollars:decision.estimatedMaxDebitDollars,
-     expectedNetDollars:decision.expectedNetDollars};
+     expectedNetDollars:decision.expectedNetDollars??decision.netIfNormallySettledDollars,
+     strategy:idea.strategy};
   }
-  return {status:'NO_VERIFIED_DIRECTIONAL_EDGE',reason};
+  return {status:alreadyAttempted?'ALREADY_ATTEMPTED':'NO_VERIFIED_DIRECTIONAL_EDGE',reason};
  };
 }
