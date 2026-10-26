@@ -667,8 +667,9 @@ async function runCryptoCycle(source='dashboard'){
  }catch{status='CRYPTO_SCAN_UNAVAILABLE'}
  finally{if(leased)try{await releaseTradingLease(leaseId)}catch{}}
  await sql(`UPDATE kal_kings_crypto_cycles SET status=$2,research_count=$3::integer,
-   candidate_count=$4::integer,traded_ticker=$5,finished_at=now()
-   WHERE tick_key=$1::bigint`,[String(tick),status,String(scanned),String(candidates),ticker]);
+   candidate_count=$4::integer,traded_ticker=$5,last_reason=$6,finished_at=now()
+   WHERE tick_key=$1::bigint`,
+   [String(tick),status,String(scanned),String(candidates),ticker,lastReason]);
  return {status,scanned,candidates,ticker};
 }
 async function getCryptoCycleStatus(){
