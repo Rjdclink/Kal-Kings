@@ -130,17 +130,18 @@ test('official Kalshi markets endpoint supplies actionable YES and NO quotes eve
  assert.equal(result[0].manualReviewAvailable,true);
 });
 test('crypto direction can be DOWN while its matching NO contract remains available for manual review',async()=>{
+ const decreasing=ohlc.map((x,i)=>({time:x[0],open:104-i,close:103-i}));
  const fetcher=async url=>{
   if(url.includes('/trade-api/v2/markets?'))
     return {ok:true,json:async()=>({markets:[{...market,status:'active'}]})};
   if(url.includes('/trade-api/v2/events?'))
     return {ok:false,json:async()=>({})};
   if(url.includes('coinbase.com'))
-    return {ok:true,json:async()=>ohlc.map(x=>[x[0],x[1],x[2],x[4],x[3],x[5]])};
+    return {ok:true,json:async()=>decreasing.map(x=>[x.time,1,1,x.open,x.close,1])};
   if(url.includes('kraken.com'))
-    return {ok:true,json:async()=>({error:[],result:{XBTUSD:ohlc.map(x=>[x[0],String(x[4]),'110','90',String(x[3]),'100','2',1])}})};
+    return {ok:true,json:async()=>({error:[],result:{XBTUSD:decreasing.map(x=>[x.time,String(x.open),'110','90',String(x.close),'100','2',1])}})};
   if(url.includes('bitstamp.net'))
-    return {ok:true,json:async()=>({data:{ohlc:ohlc.map(x=>({timestamp:String(x[0]),open:String(x[4]),close:String(x[3])}))}})};
+    return {ok:true,json:async()=>({data:{ohlc:decreasing.map(x=>({timestamp:String(x.time),open:String(x.open),close:String(x.close)}))}})};
   throw Error('Unknown provider');
  };
  const result=await fetchCryptoSignals({fetcher,now,symbols:['BTC']});
