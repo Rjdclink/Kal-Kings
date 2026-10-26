@@ -18,7 +18,8 @@ test('NO manual ticket correctly reverses the exchange YES price scale',()=>{
  const r=planManualKalshiBuy({market,bookResponse:book,feeSchedule,side:'no',count:1,bankroll:15,now});
  assert.equal(r.allowed,true);assert.equal(r.limitPrice,.54);
  const order=buildManualBuyOrder(r,'123e4567-e89b-42d3-a456-426614174000');
- assert.equal(order.side,'ask');assert.equal(order.price,'0.4600');
+ assert.equal(order.action,'buy');assert.equal(order.side,'no');
+ assert.equal(order.no_price_dollars,'0.5400');assert.equal(order.price,undefined);
  assert.equal(order.time_in_force,'fill_or_kill');
 });
 test('manual ticket cannot exceed 25 percent of free cash or available depth',()=>{
