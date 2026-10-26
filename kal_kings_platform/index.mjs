@@ -536,7 +536,7 @@ async function getScannerStatus(){
 const runSolo=makeSoloRunner({fetchAccount:getKalshiAccount,fetchQuotes:publicKalshi,
  fetchMarket:freshKalshiMarket,monitorPositions:monitorKalshiPortfolio,
  quantRiskGate,recordSnapshots:recordQuantSamples,scanPredictive:collectPredictiveStrategies,
- monitorDirectional:monitorDirectionalPositions,executeDirectional:runDirectional,
+ monitorDirectional:monitorDirectionalPositions,executeDirectional:runDirectional,recordScan:recordScannerStatus,
  sql,submit:submitSoloOrder,createId:randomUUID,now:Date.now});
 async function getPositionWatches(){
  const rows=await sql(`SELECT ticker,position_side,status,entry_price::text AS entry_price,
