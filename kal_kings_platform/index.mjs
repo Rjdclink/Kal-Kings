@@ -674,13 +674,13 @@ async function runCryptoCycle(source='dashboard'){
 }
 async function getCryptoCycleStatus(){
  const rows=await sql(`SELECT source,status,research_count,candidate_count,
-    traded_ticker,finished_at
+    traded_ticker,last_reason,finished_at
     FROM kal_kings_crypto_cycles
     ORDER BY tick_key DESC LIMIT 1`);
  const r=rows?.[0];
  return r?{status:r.status,source:r.source,scanned:Number(r.research_count||0),
    candidates:Number(r.candidate_count||0),ticker:r.traded_ticker||null,
-   checkedAt:r.finished_at}:{status:'NO_SCANS_RECORDED',scanned:0,candidates:0};
+   reason:r.last_reason||null,checkedAt:r.finished_at}:{status:'NO_SCANS_RECORDED',scanned:0,candidates:0};
 }
 async function getPositionWatches(){
  const rows=await sql(`SELECT ticker,position_side,status,entry_price::text AS entry_price,
