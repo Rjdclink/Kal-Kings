@@ -22,8 +22,10 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
     // Database idempotence also protects against webhook redelivery.
     const lock=await sql('INSERT INTO kal_kings_solo_runs(invocation_id,scheduled_at) VALUES($1,$2::timestamptz) ON CONFLICT DO NOTHING RETURNING invocation_id',[invocationId,scheduledAt]);
     if(!lock.length)return {status:'DUPLICATE_RUN'};
+    let scanMeta={cryptoSignals:0,sportsSignals:0,universeScanned:0,ideaCount:0,directionalReason:null};
     const finish=async result=>{
       await sql('UPDATE kal_kings_solo_runs SET result=$2,finished_at=now() WHERE invocation_id=$1',[invocationId,result.status]);
+      try{await recordScan({...scanMeta,...result})}catch{/* Diagnostics must never create an unsafe retry. */}
       return result;
     };
     let stage='MONITOR';
