@@ -585,7 +585,8 @@ async function getScannerStatus(){
 
 const runSolo=makeSoloRunner({fetchAccount:getKalshiAccount,fetchQuotes:publicKalshi,
  fetchMarket:freshKalshiMarket,monitorPositions:monitorKalshiPortfolio,
- quantRiskGate,recordSnapshots:recordQuantSamples,scanPredictive:collectPredictiveStrategies,
+ quantRiskGate,recordSnapshots:recordQuantSamples,
+ scanPredictive:()=>memo('predictive_scan',25000,collectPredictiveStrategies),
  monitorDirectional:monitorDirectionalPositions,executeDirectional:runDirectional,recordScan:recordScannerStatus,
  sql,submit:submitSoloOrder,createId:randomUUID,now:Date.now});
 /** Three-second user-session execution checks; Neon scheduled minutes remain
