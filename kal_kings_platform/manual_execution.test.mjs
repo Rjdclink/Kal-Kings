@@ -22,6 +22,11 @@ function setup(extra={}){
    if(!value||value.status!=='PREVIEW')return [];
    value.status='SUBMITTING';return [{...value}];
   }
+  if(query.includes('FROM kal_kings_manual_intents')&&
+     query.includes('status IN')){
+    return [...intents.values()].filter(x=>['UNCERTAIN','SUBMITTING'].includes(x.status))
+      .map(x=>({...x,contracts:String(x.count)}));
+  }
   if(query.includes('UPDATE kal_kings_manual_intents')){
    const value=intents.get(args[0]);
    if(value)value.status=args[1];
