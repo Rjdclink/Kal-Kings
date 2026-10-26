@@ -29,6 +29,20 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
       (!isTotal&&!isCrypto&&(!idea.modelPlayId||typeof idea.modelPlayId!=='string'))||
       !Number.isFinite(age(idea.updatedAt,clock))||age(idea.updatedAt,clock)<0||
       age(idea.updatedAt,clock)>(isCrypto?30_000:10_000))continue;
+   let finalConsensus=null;
+   if(isCrypto){
+    const modelAge=now()-Date.parse(idea.model?.observedAt||'');
+    if(!['yes','no'].includes(idea.side)||idea.model?.status!=='ESTIMATED'||
+       Number(idea.model.trials)<2500||modelAge<0||modelAge>30000||
+       !ticker.startsWith('KX'+idea.symbol+'15M-'))continue;
+    try{finalConsensus=await fetchFinalConsensus(idea.symbol)}catch{reason='CONSENSUS_UNAVAILABLE';continue;}
+    const elapsed=now()-Date.parse(finalConsensus?.updatedAt||'');
+    if(finalConsensus?.direction!==(idea.side==='yes'?'UP':'DOWN')||
+       Number(finalConsensus.agreeingSources)<5||finalConsensus.marketTicker!==ticker||
+       !Number.isFinite(elapsed)||elapsed<0||elapsed>3000){
+      reason='FINAL_CONSENSUS_CHANGED';continue;
+    }
+   }
    const prefix=ticker.slice(0,ticker.lastIndexOf('-')+1);
    if(account.holdings.some(x=>String(x?.ticker||'').startsWith(prefix)&&
       Number.isFinite(Number(x?.position))&&Number(x.position)!==0)){
