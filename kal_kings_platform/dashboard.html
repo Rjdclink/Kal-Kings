@@ -109,8 +109,8 @@ function renderPredictive(){
    const price=crypto?(side==='yes'?signal.yesAsk:signal.noAsk):
       (signal.totalMarket?.yesAsk||signal.market?.yesAsk);
    const canReview=Boolean(ticker&&side&&Number(price)>0&&Number(price)<1);
-   const descriptor=crypto?(r.sourceCount+' connected spot exchanges · '+(ticker||'No current Kalshi quote')):
-      (r.strategy==='LATE_GAME_LEAD'?'Live game winner · '+(ticker||'Awaiting contract'):
+   const descriptor=crypto?((signal.agreeingSources||0)+'/7 votes agree · '+(ticker||'No current Kalshi quote')):
+      (r.strategy==='LATE_GAME_LEAD'?'Commanding late-game lead · '+(ticker||'Awaiting contract'):
        'Live game total · '+(ticker||'Awaiting contract'));
    const card=canReview?`<button class="btn alt" type="button" data-manual-market="${esc(ticker)}" data-manual-side="${esc(side)}" style="margin-top:7px;padding:7px 10px">Review ${side.toUpperCase()} @ ${(Number(price)*100).toFixed(1)}¢</button>`:'';
    return `<div class="ledgerline"><div><strong>${esc(r.asset)}</strong>
