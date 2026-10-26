@@ -57,3 +57,30 @@ export function assessAlreadyExceededTotal({
   score,totalLine:line,eventKey:series+'-'+dateCode+a+h,
   note:'Score is already above the official threshold; corrections, voids, delays, and execution fees remain possible.'};
 }
+
+/** Separate proof check used by market discovery before account funding is read.
+ * An official live total already above its threshold is not a prediction.
+ */
+export function verifyExceededTotal({game,market,now=Date.now()}={}){
+ const no=reason=>({eligible:false,reason});
+ if(!game||game.state!=='in')return no('GAME_NOT_LIVE');
+ const scoreAge=now-Date.parse(game.updatedAt||''),quoteAge=now-Date.parse(market?.observedAt||'');
+ if(!finite(scoreAge)||scoreAge<0||scoreAge>20000||
+   !finite(quoteAge)||quoteAge<0||quoteAge>3000)return no('STALE_SCORE_OR_QUOTE');
+ const home=number(game.homeScore),away=number(game.awayScore),line=number(market?.floorStrike);
+ if(!finite(home)||!finite(away)||home<0||away<0||!finite(line)||line<=0||
+    home+away<=line)return no('NO_VERIFIED_CROSSED_THRESHOLD');
+ const type={NFL:'KXNFLTOTAL',NBA:'KXNBATOTAL',NHL:'KXNHLTOTAL'}[game.sport],
+   day=codeFor(game.date),a=String(game.awayAbbreviation||'').toUpperCase(),
+   h=String(game.homeAbbreviation||'').toUpperCase(),ticker=String(market?.ticker||'');
+ if(!type||!day||!a||!h||a===h||!['active','open'].includes(market.status)||
+    ![type+'-'+day+a+h+'-',type+'-'+day+h+a+'-'].some(prefix=>ticker.startsWith(prefix)))
+   return no('UNMATCHED_OR_CLOSED_CONTRACT');
+ const rules=String(market.rulesPrimary||'');
+ if(!/collectively score more than/i.test(rules)||!rules.includes(String(line))||
+    !/resolves? to Yes/i.test(rules))return no('UNVERIFIED_RULES');
+ if(Date.parse(market.closeTime||'')<=now+10000)return no('CLOSING');
+ return {eligible:true,reason:'OFFICIAL_SCORE_ALREADY_OVER',ticker,actualTotal:home+away,
+   threshold:line,conditionalOutcomeVerified:true,
+   note:'The score is already over the stated threshold; corrections and voids remain possible.'};
+}
