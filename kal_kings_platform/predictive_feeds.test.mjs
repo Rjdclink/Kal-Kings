@@ -48,3 +48,20 @@ test('Kalshi API active market status remains an eligible live matching contract
  const result=await fetchCryptoSignals({fetcher:liveFetch,now,symbols:['BTC']});
  assert.equal(result[0].marketTicker,market.ticker);
 });
+
+import {parseLiveWinProbability,selectSportsMarket} from './predictive_feeds.mjs';
+test('external win probability requires the exact live ESPN event and latest play',()=>{
+ const event={id:'GAME-1',date:'2026-10-26T23:00:00Z',competitions:[{situation:{lastPlay:{id:'PLAY-55'}}}]};
+ const summary={header:{id:'GAME-1'},winprobability:[{homeWinPercentage:.94,tiePercentage:0,playId:'PLAY-55'}]};
+ const good=parseLiveWinProbability(summary,event);
+ assert.equal(good.sourceVerified,true);assert.equal(good.homeProbability,.94);
+ assert.equal(parseLiveWinProbability(summary,{...event,id:'WRONG'}).sourceVerified,false);
+ assert.equal(parseLiveWinProbability(summary,{...event,competitions:[{situation:{lastPlay:{id:'PLAY-56'}}}]}).sourceVerified,false);
+});
+test('only same exact date and teams select a Kalshi sports outcome',()=>{
+ const markets=[{ticker:'KXNFLGAME-26OCT26DALPHI-PHI',yesAsk:.75,noAsk:.26,status:'active'},
+   {ticker:'KXNFLGAME-26OCT26NYGPHI-PHI',yesAsk:.5,noAsk:.51,status:'active'}];
+ const data={sport:'NFL',date:'2026-10-26',homeAbbreviation:'PHI',awayAbbreviation:'DAL',selectedAbbreviation:'PHI'};
+ assert.equal(selectSportsMarket(data,markets).ticker,markets[0].ticker);
+ assert.equal(selectSportsMarket({...data,awayAbbreviation:'SEA'},markets),null);
+});
