@@ -491,7 +491,7 @@ async function collectPredictiveStrategies(){
      return {...x,strategy:'LATE_GAME_LEAD',probability:p,
        modeledLossFrequency:1-p,estimatedMaxDebitDollars:ask+fee,
        expectedNetDollars:edge,allowed:Number.isFinite(edge)&&edge>.02};
-   }));
+   })],{max:12});
  return {cryptoSignals:cryptos.length,sportsSignals:sports.length,stored:rows.length,ideas};
 }
 async function getPredictiveStrategies(){
