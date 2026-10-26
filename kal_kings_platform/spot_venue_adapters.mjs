@@ -48,7 +48,7 @@ export async function additionalSpotCandles(fetcher,symbol,venue){
   const i=['gemini','okx'].includes(venue)?4:2;
   return {time:timestamp(row[0]),open:Number(row[1]),close:Number(row[i]),
     high:Number(row[venue==='gemini'||venue==='okx'?2:3]),
-    low:Number(row[venue==='gemini'?3:venue==='kucoin'?4:4]),
+    low:Number(row[venue==='gemini'||venue==='okx'?3:4]),
     volume:Number(row[5])};
  }).filter(x=>Number.isFinite(x.time)&&x.open>0&&x.close>0);
 }
