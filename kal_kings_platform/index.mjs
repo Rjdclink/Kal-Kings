@@ -523,7 +523,10 @@ async function collectPredictiveStrategies(){
    }),{max:12});
  // Already-exceeded totals get FIRST re-price and fee verification.
  // Their preliminary quotes do not claim a guaranteed profit.
- const ideas=[...totalIdeas.slice(0,8),...rankedLate,...cryptos.map(x=>selectCryptoIdea(x,{now})).filter(Boolean)].slice(0,20);
+ const cryptoIdeas=cryptos.map(x=>selectCryptoIdea(x,{now})).filter(Boolean);
+ // Reserve independent priority slots for both live sports strategies and
+ // crypto: one busy sports event cannot starve the crypto automation queue.
+ const ideas=[...totalIdeas.slice(0,8),...rankedLate.slice(0,6),...cryptoIdeas.slice(0,6)];
  return {cryptoSignals:cryptos.length,sportsSignals:sports.length,stored:rows.length,ideas,universeScanned:universeResponse.status==='fulfilled'?universeResponse.value.scanned:0};
 }
 async function getPredictiveStrategies(){
