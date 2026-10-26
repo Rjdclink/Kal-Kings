@@ -529,7 +529,8 @@ const monitorDirectionalPositions=makeDirectionalLifecycle({sql,
   getBidHistory:getQuantHistory,recordQuote:recordQuantQuote,
   createId:randomUUID,now:Date.now});
 const runDirectional=makeDirectionalRunner({sql,fetchMarket:freshKalshiMarket,
-  fetchOrderbook:getKalshiOrderbook,submit:submitSoloOrder,createId:randomUUID,now:Date.now});
+  fetchOrderbook:getKalshiOrderbook,fetchFeeSchedule:getVerifiedKalshiFeeSchedule,
+  submit:submitSoloOrder,createId:randomUUID,now:Date.now});
 async function recordScannerStatus(result){
  const details={cryptoSignals:result.cryptoSignals||0,sportsSignals:result.sportsSignals||0,
    universeScanned:result.universeScanned||0,ideaCount:result.ideaCount||0,
