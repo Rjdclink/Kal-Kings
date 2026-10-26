@@ -21,12 +21,12 @@ const candidates={
  ADA:{coinbase:'ADA-USD',kraken:'ADAUSD',bitstamp:'adausd'}
 };
 function momentum(rows,{symbol,source,now}){
- const sorted=(Array.isArray(rows)?rows:[]).map(r=>({time:integer(r.time),
+ const sorted=(Array.isArray(rows)?rows:[]).map(r=>({time:integer(r.time),lastSampleTime:integer(r.lastSampleTime),
   open:integer(r.open),close:integer(r.close),high:integer(r.high),low:integer(r.low),volume:integer(r.volume)}))
   .filter(r=>r.time!==null&&r.open>0&&r.close>0&&r.time<=Math.floor(now/1000)+120)
   .sort((a,b)=>a.time-b.time);
  const latest=sorted.at(-1),first=sorted.at(-4);
- if(!latest||!first||now-latest.time*1000>360000||
+ if(!latest||!first||now-(latest.lastSampleTime??latest.time)*1000>360000||
    latest.time-first.time<600||latest.time-first.time>1500)return null;
  return {symbol,source,start:first.open,last:latest.close,candles:sorted.slice(-35),
    indicators:technicalIndicators(sorted),observedAt:new Date(now).toISOString(),
