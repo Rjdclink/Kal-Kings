@@ -157,7 +157,7 @@ export async function fetchCryptoSignals({fetcher=fetch,now=Date.now(),symbols=[
     // only an expiring contract and cause false "no matched contract" labels.
     json(fetcher,`${KALSHI}/markets?series_ticker=KX${symbol}15M&status=open&limit=30`)
    ]);
-   const spot=s.status==='fulfilled'?s.value:[],consensus=cryptoConsensus(spot,{symbol,now});
+   const spot=s.status==='fulfilled'?s.value:[],consensus=cryptoConsensus(spot,{symbol,now,minSources:5});
    const technical=spot.find(x=>x.source==='coinbase'&&x.indicators?.status==='OK')?.indicators||spot.find(x=>x.indicators?.status==='OK')?.indicators||null;
    const regime=assessCryptoRegime(consensus,technical);
    let sourceMarkets=m.status==='fulfilled'&&Array.isArray(m.value.markets)?m.value.markets:[];
