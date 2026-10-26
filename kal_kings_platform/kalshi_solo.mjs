@@ -20,7 +20,7 @@ export function findKalshiSoloCandidates(quotes,{balance,now=Date.now(),maxCandi
     const firstLotFees=estimatedKalshiFee(1,y)+estimatedKalshiFee(1,n);
     const oneLotCost=y+n+firstLotFees;
     const unitProfit=1-oneLotCost;
-    if(unitProfit<=.01+1e-9)continue;
+    if(unitProfit<=1e-9)continue;
     const allowance=adaptiveCapitalLimit(policy,oneLotCost);
     const maxQuantity=Math.min(Math.floor(yd),Math.floor(nd),Math.floor(free/oneLotCost),Math.floor(allowance.budget/oneLotCost),50);
     if(maxQuantity<1)continue;
@@ -29,14 +29,16 @@ export function findKalshiSoloCandidates(quotes,{balance,now=Date.now(),maxCandi
       const fees=estimatedKalshiFee(count,y)+estimatedKalshiFee(count,n);
       const spent=count*(y+n)+fees;
       const net=count-spent;
-      if(spent>free+1e-8||spent>allowance.budget+1e-8||net<=.01+1e-9)continue;
+      if(spent>free+1e-8||spent>allowance.budget+1e-8||net<=1e-9)continue;
       const orphanLoss=Math.max(count*y+estimatedKalshiFee(count,y),count*n+estimatedKalshiFee(count,n));
       // If the first leg fills alone, its entire cost can be lost. This risk
       // cannot exceed the bankroll or the adaptive capital allowance.
       if(orphanLoss>allowance.budget+1e-8)continue;
       best={id:`kalshi:${quote.id}`,marketTicker:quote.id,event:quote.event||quote.label||quote.id,
         source:'KALSHI_ONLY',strategy:'YES_NO_COMPLEMENT',count,yesPrice:y,noPrice:n,
-        requiredDollars:cash(spent),estimatedFeesDollars:cash(fees),netProfitDollars:cash(net),
+        requiredDollars:Math.ceil((spent-1e-9)*10000)/10000,
+        estimatedFeesDollars:Math.ceil((fees-1e-9)*10000)/10000,
+        netProfitDollars:Math.round(net*10000)/10000,
         orphanLossDollars:cash(orphanLoss),quoteObservedAt:quote.observedAt,
         minimumTradeExceptionApplied:allowance.minimumTradeExceptionApplied,
         note:'Indicative positive two-sided spread; individual fills are not atomic. Trading may remain unhedged.'};
