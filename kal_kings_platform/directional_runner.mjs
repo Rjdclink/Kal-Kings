@@ -75,8 +75,10 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
    }
    const fee=Math.max(0,Math.round(
      (estimatedKalshiBuyDebit(1,best.price,{feeMultiplier})-best.price)*10000)/10000);
-   const quote={...fresh,ticker,status:fresh.status,yesAsk:best.price,
-     yesDepth:best.quantity,observedAt:fresh.observedAt};
+   const quote={...fresh,ticker,status:fresh.status,
+     yesAsk:book.yesAsks?.[0]?.price,noAsk:book.noAsks?.[0]?.price,
+     yesDepth:book.yesAsks?.[0]?.quantity,noDepth:book.noAsks?.[0]?.quantity,
+     observedAt:fresh.observedAt};
    const decision=isTotal?assessAlreadyExceededTotal({
        game:idea.game,market:quote,bankroll:Number(account.balance),
        feePerContract:fee,feeMultiplier,holdings:account.holdings,
