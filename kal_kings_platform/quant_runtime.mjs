@@ -33,7 +33,7 @@ export function assessLiveKalshiEntry({quote,bookResponse,bankroll,holdings=[],p
  if(minCost>accountCash+1e-7)return rejected('NO_AFFORDABLE_CONTRACT');
  const allocation=adaptiveCapitalLimit(policy,minCost);
  const candidate=optimizePairedDepth({ticker:quote.id,book,balance:accountCash,
-   maxCapital:allocation.budget,maxContracts:50,minimumNet:.01,
+   maxCapital:allocation.budget,maxContracts:50,minimumNet:0,
    slippagePerContract:.002});
  if(!candidate)return rejected('NO_POSITIVE_SPREAD');
  const correlated=portfolioExposureGate({cashAvailable:accountCash,
