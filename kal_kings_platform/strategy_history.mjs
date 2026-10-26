@@ -39,3 +39,26 @@ export async function resolveForecasts(sql,fetchMarket){
  }
  return resolved;
 }
+
+export async function getStrategyPerformance(sql){
+ const outcomes=await sql(`SELECT recorded_at AS at,
+   model_probability::text AS probability,
+   market_probability::text AS "marketProbability",won
+   FROM kal_kings_strategy_forecasts WHERE won IS NOT NULL
+   ORDER BY recorded_at DESC LIMIT 400`);
+ const orders=await sql(`SELECT status,COUNT(*)::int AS n
+   FROM kal_kings_directional_orders GROUP BY status`);
+ return {...summarizeActualOutcomes(outcomes),
+   recordedSettlements:outcomes.length,
+   actualOrderStatuses:Object.fromEntries(orders.map(x=>[x.status,Number(x.n)])),
+   modeledLossCeiling:.15};
+}
+export async function getDirectionalOrders(sql){
+ const rows=await sql(`SELECT ticker,strategy,side,status,contracts::text AS contracts,
+   filled_count::text AS filled_count,entry_price::text AS entry_price,
+   modeled_probability::text AS modeled_probability,created_at,updated_at
+   FROM kal_kings_directional_orders ORDER BY created_at DESC LIMIT 15`);
+ return rows.map(x=>({...x,contracts:Number(x.contracts),
+   filled:Number(x.filled_count),price:Number(x.entry_price),
+   modeledProbability:Number(x.modeled_probability)}));
+}
