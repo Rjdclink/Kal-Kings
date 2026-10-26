@@ -67,3 +67,18 @@ test('verified free cash from position monitor avoids redundant authenticated ac
  assert.equal(result.status,'HEDGED');
  assert.equal(f.calls.length,2);
 });
+
+test('independent predictive scanner runs even when no YES/NO arbitrage qualifies',async()=>{
+ let predictiveRuns=0;
+ const f=fixture({fetchQuotes:async()=>[{...q,noAsk:.7}],scanPredictive:async()=>{predictiveRuns++;}});
+ const result=await f.run(runInput);
+ assert.equal(result.status,'NO_QUALIFYING_KALSHI_TRADE');
+ assert.equal(predictiveRuns,1);
+ assert.equal(f.calls.length,0);
+});
+test('predictive provider failure cannot create unsafe trades',async()=>{
+ const f=fixture({fetchQuotes:async()=>[{...q,noAsk:.7}],scanPredictive:async()=>{throw Error('provider down')}});
+ const result=await f.run(runInput);
+ assert.equal(result.status,'NO_QUALIFYING_KALSHI_TRADE');
+ assert.equal(f.calls.length,0);
+});
