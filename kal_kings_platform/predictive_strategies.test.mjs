@@ -78,3 +78,11 @@ test('four of seven observations cannot pass a five-vote execution majority',()=
  const result=cryptoConsensus(names.map((n,i)=>tick(n,80000,80300+i)),{symbol:'BTC',now});
  assert.equal(result.direction,'UNKNOWN');assert.equal(result.allocationFraction,0);
 });
+
+test('small-price crypto consensus keeps meaningful price decimals',()=>{
+ const names=['coinbase','kraken','bitstamp','gemini','okx'];
+ const rows=names.map((source,i)=>({source,symbol:'DOGE',start:.089,last:.0924+i*.00001,observedAt:new Date(now).toISOString()}));
+ const c=cryptoConsensus(rows,{symbol:'DOGE',now});
+ assert.equal(c.agreeingSources,5);
+ assert.ok(Math.abs(c.medianPrice-.09242)<.00001);
+});
