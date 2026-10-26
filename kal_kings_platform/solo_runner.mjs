@@ -17,7 +17,7 @@ export function isNeonSoloTrigger(headers,body,now=Date.now()){
     body?.version===1&&body?.trigger?.type==='schedule'&&body.trigger.name==='kal-kings-solo-minute'&&
     Number.isFinite(scheduled)&&Math.abs(now-scheduled)<=120000;
 }
-export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,createId,quantRiskGate,monitorPositions=async()=>({}),recordSnapshots=async()=>{},scanPredictive=async()=>({ideas:[]}),monitorDirectional=async()=>({pendingReview:0}),executeDirectional=async()=>({status:'NO_VERIFIED_DIRECTIONAL_EDGE'}),now=Date.now}){
+export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,createId,quantRiskGate,monitorPositions=async()=>({}),recordSnapshots=async()=>{},scanPredictive=async()=>({ideas:[]}),monitorDirectional=async()=>({pendingReview:0}),executeDirectional=async()=>({status:'NO_VERIFIED_DIRECTIONAL_EDGE'}),recordScan=async()=>{},now=Date.now}){
   return async ({invocationId,scheduledAt})=>{
     // Database idempotence also protects against webhook redelivery.
     const lock=await sql('INSERT INTO kal_kings_solo_runs(invocation_id,scheduled_at) VALUES($1,$2::timestamptz) ON CONFLICT DO NOTHING RETURNING invocation_id',[invocationId,scheduledAt]);
