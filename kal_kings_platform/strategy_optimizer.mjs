@@ -192,3 +192,20 @@ export function adaptiveExitThresholds({volatilityPct=0,confidence=.5}={}){
    takeProfitPercent:round(Math.min(45,15+v*.5),2),
    trailingPercent:round(Math.min(22,6+v*.65),2)};
 }
+
+export function bidVolatilityPct(history){
+ const rows=(Array.isArray(history)?history:[]).map(x=>({
+   at:Date.parse(x.observedAt||x.observed_at||''),bid:num(x.bid)}))
+   .filter(x=>finite(x.at)&&finite(x.bid)&&x.bid>0&&x.bid<1)
+   .sort((a,b)=>a.at-b.at).slice(-30);
+ if(rows.length<5)return null;
+ const recent=[];
+ for(let i=1;i<rows.length;i++){
+  if(rows[i].at===rows[i-1].at)continue;
+  recent.push(Math.log(rows[i].bid/rows[i-1].bid));
+ }
+ if(recent.length<4)return null;
+ const mean=recent.reduce((a,b)=>a+b,0)/recent.length;
+ const sd=Math.sqrt(recent.reduce((a,b)=>a+(b-mean)**2,0)/recent.length);
+ return round(Math.min(25,sd*100),4);
+}
