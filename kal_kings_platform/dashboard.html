@@ -134,7 +134,8 @@ async function reviewManualTrade(){
    $('#manualFeedback').textContent='Quote verified against the live order book.';
    $('#manualConfirmation').innerHTML=`<div class="trade-explain" style="margin-top:12px">
       <strong>${esc(quote.ticker)} · Buy ${esc(quote.side.toUpperCase())}</strong>
-      <div class="status-line"><span>${esc(quote.count)} contracts at or below</span><strong>${(100*quote.limitPrice).toFixed(2)}¢</strong></div>
+      <div class="status-line"><span>Current best ask</span><strong>${(100*(quote.currentBestAsk??quote.limitPrice)).toFixed(2)}¢</strong></div>
+      <div class="status-line"><span>${esc(quote.count)} contracts, maximum authorized price</span><strong>${(100*quote.limitPrice).toFixed(2)}¢</strong></div>
       <div class="status-line"><span>Maximum debit including fees</span><strong>${money(quote.maxDebitDollars)}</strong></div>
       <div class="status-line"><span>Net return IF the contract wins</span><strong>${money(quote.conditionalProfitIfWinDollars)}</strong></div>
       <div class="status-line"><span>Maximum loss IF it loses</span><strong>${money(quote.maximumLossIfLoseDollars)}</strong></div>
@@ -163,9 +164,16 @@ $('#manualConfirmation').addEventListener('click',async event=>{
    const receipt=await api('/api/kalshi/manual/execute','POST',{intentId:selected.intentId});
    $('#manualFeedback').textContent=receipt.status==='FILLED'?
      ('Kalshi confirmed '+receipt.filled+' '+selected.side.toUpperCase()+' contract(s) filled.'):
-     (receipt.status==='NOT_FILLED'?'No contracts filled. Your cash has not been counted as spent.':
-     receipt.status==='UNCERTAIN'?'Kalshi has not confirmed this order; reconcile it before trying again.':
-     'Quote expired, changed, or was not available. Review a fresh quote.');
+     receipt.status==='NOT_FILLED'?'No contracts filled. You can review another live quote.':
+     receipt.status==='REJECTED'?(
+       receipt.reason==='KALSHI_ORDER_PERMISSION_DENIED'?
+         'Kalshi refused this order: the connected API key may lack permission to place trades.':
+       receipt.reason==='KALSHI_RATE_LIMITED'?
+         'Kalshi rate-limited this order. No fill was confirmed.':
+         'Kalshi rejected this order request. Review a new price or check trading permissions.'):
+     receipt.status==='UNCERTAIN'?'Kalshi has not confirmed whether this order executed. Do not resubmit until the exchange record is reconciled.':
+     receipt.status==='PARTIALLY_FILLED'?'Some contracts filled. Check your Kalshi positions before buying again.':
+     'The authorized price changed or the order could not qualify. Review a new live quote.';
    $('#manualConfirmation').innerHTML='';
    await refresh();
  }catch(e){
