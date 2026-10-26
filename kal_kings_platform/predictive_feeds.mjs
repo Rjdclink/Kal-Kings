@@ -211,7 +211,7 @@ export async function fetchCryptoSignals({fetcher=fetch,now=Date.now(),symbols=[
       referencePrice:reference.referencePrice,
       minutesRemaining:(Date.parse(market.closeTime)-now)/60000,
       volatilityPct:technical?.realizedVolatilityPct??.35,
-      observedAt:new Date(now).toISOString(),now,trials:2500}):null;
+      observedAt:new Date(now).toISOString(),now,trials:5000}):null;
    // A public quote and a historical direction ARE actionable for a person
    // to review, but do not by themselves prove a profitable automated order.
    const signalDirection=consensus.direction;
