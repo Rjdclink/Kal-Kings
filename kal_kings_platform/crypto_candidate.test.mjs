@@ -5,7 +5,7 @@ test('missing research cannot qualify',()=>assert.equal(selectCryptoIdea(null),n
 
 const now=Date.parse('2026-10-26T14:00:00Z'),ticker='KXBTC15M-26OCT261415-15';
 const signal={symbol:'BTC',direction:'DOWN',agreeingSources:6,allocationFraction:.3,
- marketTicker:ticker,market:{ticker,status:'active'},reference:{sourceCount:6,exactBenchmarkReference:true},
+ marketTicker:ticker,market:{ticker,status:'active'},reference:{sourceCount:6,exactBenchmarkReference:true,referencePrice:100},
  model:{status:'ESTIMATED',trials:2500,observedAt:new Date(now).toISOString()},
  modeledWinProbability:.93,updatedAt:new Date(now).toISOString()};
 test('six independent DOWN votes qualify real NO-side crypto market candidate',()=>{
@@ -25,4 +25,8 @@ test('a positive-value 76 percent modeled-win forecast may enter final price val
 });
 test('model probability below 70 percent does not qualify under broadened forecast cap',()=>{
  assert.equal(selectCryptoIdea({...signal,modeledWinProbability:.69},{now}),null);
+});
+
+test('no Kalshi official reference price means no executable crypto opportunity',()=>{
+ assert.equal(selectCryptoIdea({...signal,reference:{sourceCount:6,exactBenchmarkReference:true}},{now}),null);
 });
