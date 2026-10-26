@@ -373,7 +373,7 @@ async function quantRiskGate({quote,balance,holdings,positionsComplete,now}){
      getKalshiOrderbook(quote.id),getQuantHistory(quote.id),getQuantExecutedFills()]);
    await recordQuantQuote(quote);
    output=assessLiveKalshiEntry({quote,bookResponse:raw,bankroll:balance,
-     holdings,positionsComplete,history,executions,now,trials:2500,seed:43});
+     holdings,positionsComplete,history,executions,now,trials:5000,seed:43});
  }catch{/* No fallback to a price-only trade on missing market evidence */}
  // Any failed audit write also disables execution of the proposed candidate.
  await sql(`INSERT INTO kal_kings_quant_decisions(ticker,observed_at,accepted,reason,
