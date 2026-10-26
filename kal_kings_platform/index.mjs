@@ -21,6 +21,8 @@ import {normalizeKalshiBook,monteCarloExitDecision} from './quant.mjs';
 import {assessLiveKalshiEntry,historyForExit,summarizeQuantState} from './quant_runtime.mjs';
 import {selectHistorySamples} from './history_sampler.mjs';
 import {fetchCryptoSignals,fetchSportsSignals} from './predictive_feeds.mjs';
+import {makeDirectionalRunner} from './directional_runner.mjs';
+import {makeDirectionalLifecycle} from './directional_lifecycle.mjs';
 import {planOneTimeMicroOrder,interpretMicroReceipt} from './live_trade_test.mjs';
 
 const HTML=readFileSync(new URL('./dashboard.html',import.meta.url),'utf8');
@@ -242,10 +244,14 @@ async function freshKalshiMarket(ticker){
   const body=await external(`${KALSHI}/trade-api/v2/markets/${encodeURIComponent(ticker)}`);
   const m=body.market;
   if(!m||m.ticker!==ticker||!['active','open'].includes(m.status))return null;
-  return {id:m.ticker,event:m.title||m.ticker,
+  return {id:m.ticker,ticker:m.ticker,status:m.status,closeTime:m.close_time,
+     eventTicker:m.event_ticker||null,seriesTicker:m.series_ticker||null,rulesPrimary:m.rules_primary||'',
+     event:m.title||m.ticker,
     yesAsk:m.yes_ask_dollars==null?Number(m.yes_ask)/100:Number(m.yes_ask_dollars),
     noAsk:m.no_ask_dollars==null?Number(m.no_ask)/100:Number(m.no_ask_dollars),
     yesBid:m.yes_bid_dollars==null?Number(m.yes_bid)/100:Number(m.yes_bid_dollars),
+     noBid:m.no_bid_dollars==null?Number(m.no_bid)/100:Number(m.no_bid_dollars),
+     noBidDepth:Number(m.no_bid_size_fp??m.no_bid_size??0),
     yesBidDepth:Number(m.yes_bid_size_fp??m.yes_bid_size??0),
     yesDepth:Number(m.yes_ask_size_fp??m.yes_ask_size??0),
     noDepth:Number(m.no_ask_size_fp??m.no_ask_size??0),observedAt:iso()};
@@ -450,7 +456,11 @@ async function collectPredictiveStrategies(){
      FROM jsonb_to_recordset($1::jsonb) AS p(asset text,strategy text,direction text,status text,
        source_count integer,market_ticker text,details jsonb)`,[JSON.stringify(rows)]);
  }
- return {cryptoSignals:cryptos.length,sportsSignals:sports.length,stored:rows.length};
+ const ideas=sports.filter(x=>x.lateGame?.direction&&x.sourceVerified&&
+   x.marketMatchVerified&&x.market&&Number.isFinite(Number(x.externalWinProbability))&&
+   x.externalWinProbability>=.85&&x.modelPlayId)
+   .map(x=>({...x,strategy:'LATE_GAME_LEAD',probability:x.externalWinProbability}));
+ return {cryptoSignals:cryptos.length,sportsSignals:sports.length,stored:rows.length,ideas};
 }
 async function getPredictiveStrategies(){
  const rows=await sql(`SELECT DISTINCT ON (asset,strategy) asset,strategy,direction,status,
@@ -461,9 +471,16 @@ async function getPredictiveStrategies(){
    updatedAt:r.observed_at,details:typeof r.details==='string'?JSON.parse(r.details):r.details}));
 }
 
+const monitorDirectionalPositions=makeDirectionalLifecycle({sql,
+  fetchMarket:freshKalshiMarket,fetchOrderbook:getKalshiOrderbook,
+  fetchSettlements:fetchKalshiSettlements,submit:submitSoloOrder,
+  createId:randomUUID,now:Date.now});
+const runDirectional=makeDirectionalRunner({sql,fetchMarket:freshKalshiMarket,
+  fetchOrderbook:getKalshiOrderbook,submit:submitSoloOrder,createId:randomUUID,now:Date.now});
 const runSolo=makeSoloRunner({fetchAccount:getKalshiAccount,fetchQuotes:publicKalshi,
  fetchMarket:freshKalshiMarket,monitorPositions:monitorKalshiPortfolio,
  quantRiskGate,recordSnapshots:recordQuantSamples,scanPredictive:collectPredictiveStrategies,
+ monitorDirectional:monitorDirectionalPositions,executeDirectional:runDirectional,
  sql,submit:submitSoloOrder,createId:randomUUID,now:Date.now});
 async function getPositionWatches(){
  const rows=await sql(`SELECT ticker,position_side,status,entry_price::text AS entry_price,
