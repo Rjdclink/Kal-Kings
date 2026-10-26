@@ -120,6 +120,59 @@ function renderPredictive(){
        <div class="tiny">${canReview?'Manual option':'Monitoring'}</div></div></div>`;
  }).join(''):'<div class="empty"><strong>Waiting for market signals</strong><p>Research feeds update as current prices become available.</p></div>';
 }
+let pendingManualIntent=null;
+async function reviewManualTrade(){
+ const ticker=$('#manualMarket').value.trim().toUpperCase(),
+   side=$('#manualSide').value,count=Number($('#manualQuantity').value);
+ pendingManualIntent=null;$('#manualConfirmation').innerHTML='';
+ $('#manualFeedback').textContent='Checking current Kalshi price and available funds...';
+ $('#manualPreviewButton').disabled=true;
+ try{
+   const quote=await api('/api/kalshi/manual/preview','POST',{ticker,side,count});
+   if(!quote.allowed){$('#manualFeedback').textContent='Trade is not currently available at an acceptable live price.';return;}
+   pendingManualIntent=quote;
+   $('#manualFeedback').textContent='Quote verified against the live order book.';
+   $('#manualConfirmation').innerHTML=`<div class="trade-explain" style="margin-top:12px">
+      <strong>${esc(quote.ticker)} · Buy ${esc(quote.side.toUpperCase())}</strong>
+      <div class="status-line"><span>${esc(quote.count)} contracts at or below</span><strong>${(100*quote.limitPrice).toFixed(2)}¢</strong></div>
+      <div class="status-line"><span>Maximum debit including fees</span><strong>${money(quote.maxDebitDollars)}</strong></div>
+      <div class="status-line"><span>Net return IF the contract wins</span><strong>${money(quote.conditionalProfitIfWinDollars)}</strong></div>
+      <div class="status-line"><span>Maximum loss IF it loses</span><strong>${money(quote.maximumLossIfLoseDollars)}</strong></div>
+      <div class="tiny">The displayed direction is research, not a guaranteed prediction. A filled contract can lose its full cost.</div>
+      <button type="button" class="btn" id="confirmManualBuy" style="margin-top:10px">Confirm real-money Buy ${esc(quote.side.toUpperCase())}</button>
+    </div>`;
+ }catch(e){$('#manualFeedback').textContent='Unable to check this trade. '+String(e.message||'Provider unavailable');}
+ finally{$('#manualPreviewButton').disabled=false;}
+}
+$('#manualKalshiForm').addEventListener('submit',event=>{event.preventDefault();reviewManualTrade();});
+$('#predictiveCards').addEventListener('click',event=>{
+ const btn=event.target.closest('button[data-manual-market]');
+ if(!btn)return;
+ $('#manualMarket').value=btn.dataset.manualMarket;
+ $('#manualSide').value=btn.dataset.manualSide;
+ $('#manualQuantity').value='1';
+ $('#manualKalshiPanel').scrollIntoView({behavior:'smooth',block:'center'});
+ reviewManualTrade();
+});
+$('#manualConfirmation').addEventListener('click',async event=>{
+ if(!event.target.closest('#confirmManualBuy')||!pendingManualIntent)return;
+ const selected=pendingManualIntent;pendingManualIntent=null;
+ const button=event.target.closest('#confirmManualBuy');button.disabled=true;
+ $('#manualFeedback').textContent='Submitting your selected Kalshi contract...';
+ try{
+   const receipt=await api('/api/kalshi/manual/execute','POST',{intentId:selected.intentId});
+   $('#manualFeedback').textContent=receipt.status==='FILLED'?
+     ('Kalshi confirmed '+receipt.filled+' '+selected.side.toUpperCase()+' contract(s) filled.'):
+     (receipt.status==='NOT_FILLED'?'No contracts filled. Your cash has not been counted as spent.':
+     receipt.status==='UNCERTAIN'?'Kalshi has not confirmed this order; reconcile it before trying again.':
+     'Quote expired, changed, or was not available. Review a fresh quote.');
+   $('#manualConfirmation').innerHTML='';
+   await refresh();
+ }catch(e){
+   $('#manualFeedback').textContent='Order result unavailable. Check the Kalshi order history before retrying.';
+   $('#manualConfirmation').innerHTML='';
+ }
+});
 function renderUniverse(){
  const u=data.marketUniverse||{},rows=u.research||[];
  $('#universeCount').textContent=(u.scanned||0)+' checked / page';
