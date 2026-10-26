@@ -45,9 +45,19 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
       // Preserve bounded real quote histories independently of bank funding.
       // No-fill and no-funds cycles must not count toward profitable trades.
       stage='QUOTE_HISTORY';
-      const currentQuotes=await fetchQuotes();
-      if(!Array.isArray(currentQuotes))return finish({status:'INVALID_PUBLIC_QUOTES'});
-      await recordSnapshots(currentQuotes);
+      // The old eight-series YES/NO scanner is OPTIONAL for the independent
+      // directional engine. Its outage cannot block a separately verified
+      // late-game or already-crossed total opportunity.
+      let currentQuotes=[];
+      try{
+        const legacy=await fetchQuotes();
+        if(Array.isArray(legacy))currentQuotes=legacy;
+      }catch{/* No legacy quotes; other venue data may still be available. */}
+      if(currentQuotes.length){
+        try{await recordSnapshots(currentQuotes)}
+        catch{/* Missing history is not permission to bypass the live risk gate. */}
+      }
+      scanMeta.legacyQuoteCount=currentQuotes.length;
       // Independent directional, late-game and totals watchlist runs even when
       // the existing paired YES/NO engine has no viable opportunity.
       let predictive={ideas:[]};
@@ -77,6 +87,8 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
           return finish({status:'HALTED_DIRECTIONAL_RECONCILIATION'});
       }
       if(!scanMeta.ideaCount&&!scanMeta.directionalReason)scanMeta.directionalReason='NO_VERIFIED_DIRECTIONAL_CANDIDATES';
+      if(!currentQuotes.length)return finish({status:'NO_VALID_LEGACY_QUOTES',
+        reason:'LEGACY_SPORTS_QUOTES_UNAVAILABLE'});
       stage='QUOTES';
       const candidates=findKalshiSoloCandidates(currentQuotes,{balance,now:now()});
       if(!candidates.length)return finish({status:'NO_QUALIFYING_KALSHI_TRADE',reason:'NO_POSITIVE_YES_NO_SPREAD_AFTER_FEES'});
