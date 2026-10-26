@@ -85,7 +85,7 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
        holdingsComplete:account.positionsComplete,now:now()
      }):assessKalshiValue({market:quote,side:isCrypto?idea.side:'yes',
        probability:idea.externalWinProbability??idea.probability,
-       probabilitySource:'ESPN_LIVE_MODEL',sourceVerified:true,marketMatchVerified:true,
+       probabilitySource:isCrypto?'CRYPTO_SCENARIO_PROXY':'ESPN_LIVE_MODEL',sourceVerified:true,marketMatchVerified:true,
        bankroll:Number(account.balance),holdings:account.holdings,
        feePerContract:fee,now:now(),maxLossProbability:.15});
    if(!decision.allowed){reason=decision.reason;continue;}
