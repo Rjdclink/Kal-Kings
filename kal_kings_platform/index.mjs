@@ -473,6 +473,9 @@ async function collectPredictiveStrategies(){
      direction:x.direction==='UNKNOWN'?null:x.direction,status:x.status||'DATA_UNAVAILABLE',
      source_count:x.sources||0,market_ticker:x.marketTicker||null,details:x})),
    ...sports.flatMap(x=>[
+     ...(x.exceededTotalsMarkets?.slice(0,4)||[]).map(m=>({asset:x.event,
+        strategy:'TOTAL_ALREADY_OVER',direction:'OVER',status:'SCORE_EXCEEDS_CONTRACT',
+        source_count:1,market_ticker:m.ticker,details:{...x,totalMarket:m}})),
      ...(x.lateGame?.direction?[{asset:x.event,strategy:'LATE_GAME_LEAD',
        direction:x.lateGame.direction,status:x.lateGame.reason,
        source_count:1,market_ticker:null,details:x}]:[]),
