@@ -65,3 +65,6 @@ test('only same exact date and teams select a Kalshi sports outcome',()=>{
  assert.equal(selectSportsMarket(data,markets).ticker,markets[0].ticker);
  assert.equal(selectSportsMarket({...data,awayAbbreviation:'SEA'},markets),null);
 });
+
+import {selectTotalsMarket} from './predictive_feeds.mjs';
+test('total matching rejects other games',()=>{assert.equal(selectTotalsMarket({sport:'NFL',date:'2026-10-26',homeAbbreviation:'PHI',awayAbbreviation:'DAL',totalLine:30},[]),null)});
