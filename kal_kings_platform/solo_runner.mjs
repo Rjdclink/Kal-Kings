@@ -17,7 +17,7 @@ export function isNeonSoloTrigger(headers,body,now=Date.now()){
     body?.version===1&&body?.trigger?.type==='schedule'&&body.trigger.name==='kal-kings-solo-minute'&&
     Number.isFinite(scheduled)&&Math.abs(now-scheduled)<=120000;
 }
-export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,createId,quantRiskGate,monitorPositions=async()=>({}),recordSnapshots=async()=>{},scanPredictive=async()=>{},now=Date.now}){
+export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,createId,quantRiskGate,monitorPositions=async()=>({}),recordSnapshots=async()=>{},scanPredictive=async()=>({ideas:[]}),monitorDirectional=async()=>({pendingReview:0}),executeDirectional=async()=>({status:'NO_VERIFIED_DIRECTIONAL_EDGE'}),now=Date.now}){
   return async ({invocationId,scheduledAt})=>{
     // Database idempotence also protects against webhook redelivery.
     const lock=await sql('INSERT INTO kal_kings_solo_runs(invocation_id,scheduled_at) VALUES($1,$2::timestamptz) ON CONFLICT DO NOTHING RETURNING invocation_id',[invocationId,scheduledAt]);
@@ -31,6 +31,8 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
       // Reconcile bot positions and inspect exchange-held cash before seeking new
       // entries. Settlement notices are NOT manually credited to bankroll.
       const monitored=await monitorPositions();
+      const directionalPositions=await monitorDirectional(monitored);
+      if(Number(directionalPositions?.pendingReview)>0)return finish({status:'HALTED_DIRECTIONAL_RECONCILIATION'});
       if(Number(monitored?.pendingReview)>0)return finish({status:'HALTED_PENDING_RECONCILIATION'});
       stage='EXPOSURES';
       const exposures=await sql(`SELECT o.ticker FROM kal_kings_solo_orders o
@@ -46,7 +48,8 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
       await recordSnapshots(currentQuotes);
       // Independent directional, late-game and totals watchlist runs even when
       // the existing paired YES/NO engine has no viable opportunity.
-      try{await scanPredictive()}catch{/* Never let an advisory feed cause blind orders or stop cash reconciliation. */}
+      let predictive={ideas:[]};
+      try{predictive=await scanPredictive()}catch{/* Never let an advisory feed cause blind orders or stop cash reconciliation. */}
       stage='ACCOUNT';
       if(monitored?.status==='ACCOUNT_UNAVAILABLE')return finish({status:'ACCOUNT_UNAVAILABLE'});
       const verifiedCash=Number(monitored?.freeCash);
@@ -57,6 +60,16 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
       const account=hasMonitoredCash?monitored:await fetchAccount();
       const balance=hasMonitoredCash?verifiedCash:Number(account?.balance);
       if(!Number.isFinite(balance)||balance<=0)return finish({status:'UNFUNDED'});
+      if(Array.isArray(predictive?.ideas)&&predictive.ideas.length){
+        stage='DIRECTIONAL';
+        const dir=await executeDirectional({ideas:predictive.ideas,
+          account:{status:'VERIFIED',balance,holdings:account?.holdings,
+            positionsComplete:account?.positionsComplete}});
+        if(['FILLED','PARTIALLY_FILLED','NOT_FILLED','UNCERTAIN','ALREADY_ATTEMPTED'].includes(dir?.status))
+          return finish({status:'DIRECTIONAL_'+dir.status,ticker:dir.ticker});
+        if(dir?.status==='HALTED_PENDING_RECONCILIATION')
+          return finish({status:'HALTED_DIRECTIONAL_RECONCILIATION'});
+      }
       stage='QUOTES';
       const candidates=findKalshiSoloCandidates(currentQuotes,{balance,now:now()});
       if(!candidates.length)return finish({status:'NO_QUALIFYING_KALSHI_TRADE'});
