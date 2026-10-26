@@ -924,6 +924,13 @@ export default {
     }
     try{
       if(request.method==='GET'&&path==='/api/state')return reply(await state());
+      if(request.method==='GET'&&path==='/api/kalshi/status'){
+        const [cryptoCycleStatus,scannerStatus,manualOrderHistory]=await Promise.all([
+          getCryptoCycleStatus().catch(()=>({status:'UNAVAILABLE',scanned:0,candidates:0})),
+          getScannerStatus().catch(()=>({status:'UNAVAILABLE'})),
+          getManualOrders().catch(()=>[])]);
+        return reply({cryptoCycleStatus,scannerStatus,manualOrderHistory,asOf:iso()});
+      }
       if(request.method==='GET'&&path==='/api/tradingview/alerts')return reply({alerts:await getTradingViewAlerts(),configured:await tradingViewEnabled()});
       if(request.method==='POST'&&path==='/api/tradingview/config')return reply(await setTradingViewSecret((await request.json()).passphrase));
       if(request.method==='GET'&&path==='/api/wagers')return reply({wagers:await getWagers()});
