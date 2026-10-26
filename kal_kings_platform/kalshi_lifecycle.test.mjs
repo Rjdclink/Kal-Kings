@@ -15,7 +15,8 @@ function fixture({balance=8,settlements=[],position='1.00',bid=.36,peak=.5,soloS
   throw Error(q);
  };
  const submits=[];
- const deps={fetchAccount:async()=>({balance,holdings:[{ticker,position:Number(position)}]}),fetchSettlements:async()=>{if(settlementError)throw Error('Provider HTTP 403');return settlements;},
+ const deps={fetchAccount:async()=>({status:'VERIFIED',balance,positionsComplete:true,
+   holdings:[{ticker,position:Number(position)}]}),fetchSettlements:async()=>{if(settlementError)throw Error('Provider HTTP 403');return settlements;},
   fetchMarket:async()=>({id:ticker,yesBid:bid,yesBidDepth:4,observedAt:new Date(now-quoteAge).toISOString()}),sql,
   submit:async order=>{submits.push(order);return submitResponse},createId:()=> '123e4567-e89b-42d3-a456-426614174000',now:()=>now};
  return {run:makeKalshiLifecycle(deps),seen,submits};
