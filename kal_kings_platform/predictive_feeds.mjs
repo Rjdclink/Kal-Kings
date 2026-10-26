@@ -347,7 +347,7 @@ export async function fetchSportsSignals({fetcher=fetch,now=Date.now(),sports=['
      if(signal.lateGame?.direction&&event){
        try{
          const summary=await json(fetcher,`${ESPN}/${route[sport]}/summary?event=${encodeURIComponent(event.id)}`);
-         probability=parseLiveWinProbability(summary,event);
+         probability=parseLiveWinProbability(summary,event,now);
        }catch{/* A missing play-verified ESPN estimate is not authorization. */}
      }
      const leader=signal.lateGame?.direction,
