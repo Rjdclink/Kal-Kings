@@ -17,7 +17,7 @@ export function isNeonSoloTrigger(headers,body,now=Date.now()){
     body?.version===1&&body?.trigger?.type==='schedule'&&body.trigger.name==='kal-kings-solo-minute'&&
     Number.isFinite(scheduled)&&Math.abs(now-scheduled)<=120000;
 }
-export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,createId,quantRiskGate,monitorPositions=async()=>({}),recordSnapshots=async()=>{},now=Date.now}){
+export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,createId,quantRiskGate,monitorPositions=async()=>({}),recordSnapshots=async()=>{},scanPredictive=async()=>{},now=Date.now}){
   return async ({invocationId,scheduledAt})=>{
     // Database idempotence also protects against webhook redelivery.
     const lock=await sql('INSERT INTO kal_kings_solo_runs(invocation_id,scheduled_at) VALUES($1,$2::timestamptz) ON CONFLICT DO NOTHING RETURNING invocation_id',[invocationId,scheduledAt]);
@@ -44,6 +44,9 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
       const currentQuotes=await fetchQuotes();
       if(!Array.isArray(currentQuotes))return finish({status:'INVALID_PUBLIC_QUOTES'});
       await recordSnapshots(currentQuotes);
+      // Independent directional, late-game and totals watchlist runs even when
+      // the existing paired YES/NO engine has no viable opportunity.
+      try{await scanPredictive()}catch{/* Never let an advisory feed cause blind orders or stop cash reconciliation. */}
       stage='ACCOUNT';
       if(monitored?.status==='ACCOUNT_UNAVAILABLE')return finish({status:'ACCOUNT_UNAVAILABLE'});
       const verifiedCash=Number(monitored?.freeCash);
