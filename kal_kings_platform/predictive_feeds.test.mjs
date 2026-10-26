@@ -195,3 +195,25 @@ test('a YES market does not require a simultaneous NO quote',async()=>{const fet
 test('ESPN late-game win probability can match recent summary play without scoreboard situation',()=>{const at=Date.parse('2026-10-26T19:00:00Z');const event={id:'TEST',status:{period:4},competitions:[{competitors:[{homeAway:'home',score:'31'},{homeAway:'away',score:'10'}]}]};const summary={header:{id:'TEST'},winprobability:[{homeWinPercentage:.94,tiePercentage:0,playId:'P55'}],drives:{current:{plays:[{id:'P55',homeScore:31,awayScore:10,period:{number:4},wallclock:new Date(at-8000).toISOString()}]}}};assert.equal(parseLiveWinProbability(summary,event,at).sourceVerified,true);assert.equal(parseLiveWinProbability(summary,{...event,id:'other'},at).sourceVerified,false)});
 
 test('ESPN summary play with old wallclock or mismatched scoreboard scores is not validated',()=>{const at=Date.parse('2026-10-26T19:00:00Z');const event={id:'TEST',status:{period:4},competitions:[{competitors:[{homeAway:'home',score:'31'},{homeAway:'away',score:'10'}]}]};const summary={header:{id:'TEST'},winprobability:[{homeWinPercentage:.97,tiePercentage:0,playId:'P55'}],plays:[{id:'P55',homeScore:30,awayScore:10,period:{number:4},wallclock:new Date(at-5000).toISOString()}]};assert.equal(parseLiveWinProbability(summary,event,at).sourceVerified,false);summary.plays[0].homeScore=31;assert.equal(parseLiveWinProbability(summary,event,at+180000).sourceVerified,false)});
+
+test('ESPN game summary latest play can verify a live late-game probability without scoreboard situation field',()=>{
+ const event={id:'GAME-2',status:{type:{state:'in'},period:4,clock:210},
+   competitions:[{competitors:[]}]};
+ const summary={header:{id:'GAME-2'},winprobability:[
+   {homeWinPercentage:.93,playId:'p11'},{homeWinPercentage:.95,playId:'p12'}],
+   drives:{current:{plays:[
+    {id:'p11',period:{number:4},clock:{displayValue:'3:45'}},
+    {id:'p12',period:{number:4},clock:{displayValue:'3:32'}}]}}};
+ const got=parseLiveWinProbability(summary,event);
+ assert.equal(got.sourceVerified,true);assert.equal(got.homeProbability,.95);
+ assert.equal(got.modelPlayId,'p12');
+});
+test('ESPN summary model is not fresh when scoreboard clock or period differs materially',()=>{
+ const event={id:'GAME-2',status:{type:{state:'in'},period:4,clock:90},
+   competitions:[{}]};
+ const summary={header:{id:'GAME-2'},
+   winprobability:[{homeWinPercentage:.95,playId:'p12'}],
+   drives:{current:{plays:[{id:'p12',period:{number:4},clock:{displayValue:'3:32'}}]}}};
+ assert.equal(parseLiveWinProbability(summary,event).sourceVerified,false);
+ assert.equal(parseLiveWinProbability(summary,{...event,status:{type:{state:'in'},period:3,clock:212}}).sourceVerified,false);
+});
