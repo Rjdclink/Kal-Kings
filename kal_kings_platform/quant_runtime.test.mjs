@@ -41,7 +41,7 @@ test('quant diagnostics never label absent calibration as live verified accuracy
  assert.equal(state.confidence,'UNCALIBRATED');assert.equal(state.verifiedExpectedProfit,null);
 });
 
-test('modeled loss-frequency ceiling is 15 percent',()=>{assert.equal(MAX_MODELED_LOSS_FREQUENCY,.15)});
+test('modeled loss-frequency ceiling is 30 percent',()=>{assert.equal(MAX_MODELED_LOSS_FREQUENCY,.30)});
 
 test('the global Monte Carlo modeled loss-frequency ceiling is raised to 30 percent',()=>{
  assert.equal(MAX_MODELED_LOSS_FREQUENCY,.30);
