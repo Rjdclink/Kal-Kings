@@ -138,3 +138,16 @@ test('five-second UI scan slots are stable for duplicate clients and change at b
 
 test('a simultaneous five-second scan cannot start another cash-consuming worker',async()=>{let placed=0;const f=fixture({acquireScanLease:async()=>false,submit:async()=>{placed++;return{fill_count:'1.00'}}});const result=await f.run(runInput);assert.equal(result.status,'SCANNER_BUSY');assert.equal(placed,0)});
 test('an acquired scan lease is released after completion',async()=>{let released=0;const f=fixture({acquireScanLease:async()=>true,releaseScanLease:async()=>{released++}});await f.run(runInput);assert.equal(released,1)});
+
+test('confirmed profitable directional entry does not wait for unused legacy quote discovery',async()=>{
+ let legacyCalls=0;
+ const f=fixture({
+   fetchQuotes:async()=>{legacyCalls++;throw Error('legacy feed should not run before directional trade');},
+   monitorPositions:async()=>({status:'MONITORED',freeCash:15,holdings:[],positionsComplete:true,pendingReview:0}),
+   fetchAccount:async()=>({status:'VERIFIED',balance:15,holdings:[],positionsComplete:true}),
+   scanPredictive:async()=>({ideas:[{id:'current-approved-crypto'}],cryptoSignals:1}),
+   executeDirectional:async()=>({status:'FILLED',ticker:'KXBTC15M-LIVE'})});
+ const result=await f.run(runInput);
+ assert.equal(result.status,'DIRECTIONAL_FILLED');
+ assert.equal(legacyCalls,0);
+});
