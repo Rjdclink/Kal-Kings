@@ -188,7 +188,7 @@ test('Gemini minute-candle freshness uses its last observed minute, not the five
  assert.ok(rows.some(x=>x.source==='gemini'));
 });
 
-test('ESPN scoreboards without situation.lastPlay can still use matching live summary win odds',()=>{const event={id:'401873011',competitions:[{}]};const summary={header:{id:'401873011',competitions:[{status:{type:{state:'in'}}}]},winprobability:[{playId:'4018730113963',homeWinPercentage:.95,tiePercentage:0}]};const model=parseLiveWinProbability(summary,event);assert.equal(model.sourceVerified,true);assert.equal(model.homeProbability,.95);assert.equal(parseLiveWinProbability({...summary,header:{...summary.header,competitions:[{status:{type:{state:'post'}}}]}},event).sourceVerified,false)});
+test('ESPN summary odds alone do not establish a fresh live game play without matching score evidence',()=>{const event={id:'401873011',competitions:[{}]};const summary={header:{id:'401873011',competitions:[{status:{type:{state:'in'}}}]},winprobability:[{playId:'4018730113963',homeWinPercentage:.95,tiePercentage:0}]};const model=parseLiveWinProbability(summary,event);assert.equal(model.sourceVerified,false);assert.equal(model.homeProbability,null);assert.equal(parseLiveWinProbability({...summary,header:{...summary.header,competitions:[{status:{type:{state:'post'}}}]}},event).sourceVerified,false)});
 
 test('a YES market does not require a simultaneous NO quote',async()=>{const fetcher=async url=>url.includes('/markets?')?{ok:true,json:async()=>({markets:[{...market,no_ask_dollars:null}]})}:mockFetch(url);const row=(await fetchCryptoSignals({fetcher,now,symbols:['BTC']}))[0];assert.equal(row.marketTicker,market.ticker)});
 
