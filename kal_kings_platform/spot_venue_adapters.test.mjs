@@ -20,3 +20,5 @@ test('Gemini current one-minute candles roll into four five-minute bars without 
  assert.equal(rows[3].lastSampleTime,t+19*60);
  assert.equal(rows[3].close,120);
 });
+
+test('OKX OHLC low is source field 3, not field 4 close price',async()=>{const x=await additionalSpotCandles(async()=>({ok:true,json:async()=>({code:'0',data:[['1793010000000','100','120','80','110','3']]})}),'BTC','okx');assert.equal(x[0].high,120);assert.equal(x[0].low,80);assert.equal(x[0].close,110)});
