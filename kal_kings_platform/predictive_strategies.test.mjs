@@ -23,21 +23,21 @@ const contract={ticker:'KXBTC15M-26OCT261200-00',seriesTicker:'KXBTC15M',symbol:
   closeTime:new Date(now+4*60000).toISOString(),observedAt:new Date(now-1000).toISOString(),
   yesAsk:.66,noAsk:.35,yesDepth:50,noDepth:50};
 test('consensus alone never silently authorizes money orders',()=>{
- const c=cryptoConsensus(base,{symbol:'BTC',now,minSources:3});
+ const c=cryptoConsensus([...base,tick('gemini',80000,80300),tick('okx',80000,80310)],{symbol:'BTC',now});
  const d=planDirectionalTrade({consensus:c,market:contract,bankroll:15,feePerContract:.03,now});
  assert.equal(d.allowed,false);assert.equal(d.reason,'INDEPENDENT_PROBABILITY_NOT_VALIDATED');
 });
 test('a validated risk model can approve an affordable correctly mapped directional contract',()=>{
- const c=cryptoConsensus(base,{symbol:'BTC',now,minSources:3});
- const model={validated:true,probability:.91,sampleCount:150,holdoutCount:45,symbol:'BTC',direction:'UP',horizonMinutes:15,settlementBasis:'CF_BENCHMARKS_RTI',validatedAt:new Date(now-60000).toISOString()};
+ const c=cryptoConsensus([...base,tick('gemini',80000,80300),tick('okx',80000,80310)],{symbol:'BTC',now});
+ const model={validated:true,probability:.91,sampleCount:150,holdoutCount:45,symbol:'BTC',direction:'UP',horizonMinutes:15,settlementBasis:'CF_BENCHMARKS_RTI',validatedAt:new Date(now-1000).toISOString()};
  const d=planDirectionalTrade({consensus:c,market:contract,bankroll:15,feePerContract:.03,model,now});
- assert.equal(d.allowed,true);assert.equal(d.side,'yes');assert.equal(d.contracts,1);
+ assert.equal(d.allowed,true);assert.equal(d.side,'yes');assert.equal(d.contracts,4);
 });
 test('no direction mismatch or stale quote may authorize an order',()=>{
- const c=cryptoConsensus(base,{symbol:'BTC',now,minSources:3});
- const model={validated:true,probability:.91,sampleCount:150,holdoutCount:45,symbol:'BTC',direction:'UP',horizonMinutes:15,settlementBasis:'CF_BENCHMARKS_RTI',validatedAt:new Date(now-60000).toISOString()};
+ const c=cryptoConsensus([...base,tick('gemini',80000,80300),tick('okx',80000,80310)],{symbol:'BTC',now});
+ const model={validated:true,probability:.91,sampleCount:150,holdoutCount:45,symbol:'BTC',direction:'UP',horizonMinutes:15,settlementBasis:'CF_BENCHMARKS_RTI',validatedAt:new Date(now-1000).toISOString()};
  assert.equal(planDirectionalTrade({consensus:c,market:{...contract,seriesTicker:'KXETH15M'},bankroll:15,feePerContract:.03,model,now}).allowed,false);
- assert.equal(planDirectionalTrade({consensus:c,market:{...contract,observedAt:new Date(now-60000).toISOString()},bankroll:15,feePerContract:.03,model,now}).allowed,false);
+ assert.equal(planDirectionalTrade({consensus:c,market:{...contract,observedAt:new Date(now-1000).toISOString()},bankroll:15,feePerContract:.03,model,now}).allowed,false);
 });
 test('a commanding late lead is detected without claiming guaranteed value',()=>{
  const d=assessLateGame({sport:'NFL',home:'Philadelphia Eagles',away:'Dallas Cowboys',homeScore:31,awayScore:10,period:4,clockSeconds:210,state:'in',updatedAt:new Date(now-1000).toISOString(),now});
