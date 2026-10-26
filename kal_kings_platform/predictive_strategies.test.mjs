@@ -99,3 +99,5 @@ test('fresh Monte Carlo crypto model requires no arbitrary 100 training / 30 hol
  assert.equal(r.side,'yes');
  assert.ok(r.expectedNetDollars>.02);
 });
+
+test('six small same-direction moves count as six votes, with profitability checked separately',()=>{const returns=[-.00001,-.02241,-.0076,-.02361,-.02512,-.04388,-.0485];const names=['coinbase','kraken','bitstamp','gemini','okx','kucoin','bitfinex'];const quotes=names.map((source,i)=>tick(source,80000,80000*(1+returns[i]/100)));const result=cryptoConsensus(quotes,{symbol:'BTC',now});assert.equal(result.direction,'DOWN');assert.equal(result.agreeingSources,6);assert.equal(result.allocationFraction,.3)});
