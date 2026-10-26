@@ -512,6 +512,27 @@ const monitorDirectionalPositions=makeDirectionalLifecycle({sql,
   createId:randomUUID,now:Date.now});
 const runDirectional=makeDirectionalRunner({sql,fetchMarket:freshKalshiMarket,
   fetchOrderbook:getKalshiOrderbook,submit:submitSoloOrder,createId:randomUUID,now:Date.now});
+async function recordScannerStatus(result){
+ const details={cryptoSignals:result.cryptoSignals||0,sportsSignals:result.sportsSignals||0,
+   universeScanned:result.universeScanned||0,ideaCount:result.ideaCount||0,
+   directionalReason:result.directionalReason||null,ticker:result.ticker||null};
+ await sql(`INSERT INTO kal_kings_scanner_status
+   (id,last_status,last_reason,details,updated_at)
+   VALUES('main',$1,$2,$3::jsonb,now())
+   ON CONFLICT(id) DO UPDATE SET last_status=EXCLUDED.last_status,
+     last_reason=EXCLUDED.last_reason,details=EXCLUDED.details,updated_at=now()`,
+   [String(result.status||'UNKNOWN'),result.reason||result.directionalReason||null,
+    JSON.stringify(details)]);
+}
+async function getScannerStatus(){
+ const rows=await sql(`SELECT last_status,last_reason,details::text AS details,updated_at
+   FROM kal_kings_scanner_status WHERE id='main'`);
+ const x=rows[0];
+ return x?{status:x.last_status,reason:x.last_reason,
+   details:typeof x.details==='string'?JSON.parse(x.details):x.details,
+   updatedAt:x.updated_at}:{status:'NOT_YET_SCANNED'};
+}
+
 const runSolo=makeSoloRunner({fetchAccount:getKalshiAccount,fetchQuotes:publicKalshi,
  fetchMarket:freshKalshiMarket,monitorPositions:monitorKalshiPortfolio,
  quantRiskGate,recordSnapshots:recordQuantSamples,scanPredictive:collectPredictiveStrategies,
