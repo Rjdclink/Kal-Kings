@@ -150,6 +150,19 @@ async function fetchSportsMarkets(fetcher,sport,now,kind='game'){
  }catch{return []}
 }
 
+export function calculateCryptoWindowReference(spot,closeTime){
+ const target=Date.parse(closeTime||'')-900000,opens=[],current=[];
+ for(const item of spot||[]){
+  const bar=item.candles?.find(c=>Math.abs(Number(c.time)*1000-target)<30000);
+  if(Number(bar?.open)>0&&Number(item.last)>0){
+   opens.push(Number(bar.open));current.push(Number(item.last));
+  }
+ }
+ if(opens.length<5||Math.max(...opens)/Math.min(...opens)>1.02)return null;
+ const median=x=>x.sort((a,b)=>a-b)[Math.floor(x.length/2)];
+ return {referencePrice:median(opens),spotPrice:median(current),
+  sourceCount:opens.length,source:'SPOT_OPEN_PROXY_NOT_CF_BENCHMARKS'};
+}
 export async function fetchCryptoSignals({fetcher=fetch,now=Date.now(),symbols=['BTC','ETH','SOL','XRP','DOGE','ADA']}={}){
  const all=await Promise.all(symbols.filter(x=>candidates[x]).map(async symbol=>{
    const [s,m]=await Promise.allSettled([
