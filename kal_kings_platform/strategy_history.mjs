@@ -51,7 +51,7 @@ export async function getStrategyPerformance(sql){
  return {...summarizeActualOutcomes(outcomes),
    recordedSettlements:outcomes.length,
    actualOrderStatuses:Object.fromEntries(orders.map(x=>[x.status,Number(x.n)])),
-   modeledLossCeiling:.15};
+   modeledLossCeiling:.30};
 }
 export async function getDirectionalOrders(sql){
  const rows=await sql(`SELECT ticker,strategy,side,status,contracts::text AS contracts,
