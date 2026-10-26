@@ -542,7 +542,7 @@ const monitorDirectionalPositions=makeDirectionalLifecycle({sql,
   createId:randomUUID,now:Date.now});
 const runDirectional=makeDirectionalRunner({sql,fetchMarket:freshKalshiMarket,
   fetchOrderbook:getKalshiOrderbook,fetchFeeSchedule:getVerifiedKalshiFeeSchedule,
-  fetchFinalConsensus:async symbol=>(await fetchCryptoSignals({symbols:[symbol]}))[0],
+  fetchFinalConsensus:async symbol=>(await fetchCryptoSignals({symbols:[symbol],runSimulation:false}))[0],
   submit:submitSoloOrder,createId:randomUUID,now:Date.now});
 const manualOrders=makeManualExecutor({sql,fetchAccount:getKalshiAccount,
   fetchMarket:freshKalshiMarket,fetchOrderbook:getKalshiOrderbook,
