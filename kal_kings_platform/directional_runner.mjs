@@ -3,13 +3,13 @@
  * Deliberately independent of the two-leg YES/NO arbitrage worker.
  * Submitted orders are idempotent, FOK, and marked uncertain on timeouts.
  */
-import {estimatedKalshiFee} from './engine.mjs';
+import {estimatedKalshiBuyDebit} from './engine.mjs';
 import {normalizeKalshiBook} from './quant.mjs';
 import {assessKalshiValue} from './strategy_optimizer.mjs';
 import {assessAlreadyExceededTotal} from './total_strategy.mjs';
 const validTicker=t=>/^[A-Z0-9_-]{4,128}$/.test(t||'');
 const age=(v,now)=>now-Date.parse(v||'');
-export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,submit,createId,now=Date.now}){
+export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSchedule,submit,createId,now=Date.now}){
  return async function run({ideas=[],account}={}){
   const clock=now();
   if(account?.status!=='VERIFIED'||account?.positionsComplete!==true||
@@ -43,13 +43,24 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,submit,cre
    if(!Number.isFinite(Date.parse(fresh.closeTime||''))||
       Date.parse(fresh.closeTime)<=now()+30000){reason='MARKET_CLOSING';continue;}
    const best=book.yesAsks[0];
-   // Reserve the worst per-order unit fee across plausible price improvement.
-   const fee=Math.max(estimatedKalshiFee(1,best.price),estimatedKalshiFee(1,.5));
+   // The venue supplies series-specific multipliers. Unsupported flat fees,
+   // missing metadata, or an unavailable schedule are not proof of profit.
+   let feeSchedule=null;
+   try{feeSchedule=typeof fetchFeeSchedule==='function'?await fetchFeeSchedule(ticker):null}
+   catch{feeSchedule=null}
+   const feeMultiplier=Number(feeSchedule?.feeMultiplier),feeType=feeSchedule?.feeType;
+   if(!feeSchedule||!['quadratic','quadratic_with_maker_fees',
+       'quadratic_with_combo_maker_fees'].includes(feeType)||
+       !Number.isFinite(feeMultiplier)||feeMultiplier<0||feeMultiplier>4){
+     reason='FEE_SCHEDULE_UNVERIFIED';continue;
+   }
+   const fee=Math.max(0,Math.round(
+     (estimatedKalshiBuyDebit(1,best.price,{feeMultiplier})-best.price)*10000)/10000);
    const quote={...fresh,ticker,status:fresh.status,yesAsk:best.price,
      yesDepth:best.quantity,observedAt:fresh.observedAt};
    const decision=isTotal?assessAlreadyExceededTotal({
        game:idea.game,market:quote,bankroll:Number(account.balance),
-       feePerContract:fee,holdings:account.holdings,
+       feePerContract:fee,feeMultiplier,holdings:account.holdings,
        holdingsComplete:account.positionsComplete,now:now()
      }):assessKalshiValue({market:quote,side:'yes',
        probability:idea.externalWinProbability??idea.probability,
@@ -57,9 +68,8 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,submit,cre
        bankroll:Number(account.balance),holdings:account.holdings,
        feePerContract:fee,now:now(),maxLossProbability:.15});
    if(!decision.allowed){reason=decision.reason;continue;}
-   if(decision.contracts!==1&&decision.estimatedMaxDebitDollars>Number(account.balance)*.02+1e-8){
-     reason='CONCENTRATION_LIMIT';continue;
-   }
+   // Each strategy's order planner already enforces its own bankroll cap.
+   // A second unrelated 2% check would falsely veto profitable total orders.
    const clientId=createId();
    const inserted=await sql(`INSERT INTO kal_kings_directional_orders
      (ticker,event_key,strategy,side,contracts,entry_price,estimated_fees,modeled_probability,
@@ -68,7 +78,8 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,submit,cre
        $8::numeric,$9::uuid,'SUBMITTING',now(),now())
      ON CONFLICT(ticker) DO NOTHING RETURNING ticker`,
      [ticker,String(idea.eventKey||ticker),idea.strategy,
-      String(decision.contracts),String(decision.limitPrice),String(decision.feePerContract),
+      String(decision.contracts),String(decision.limitPrice),
+      String(decision.estimatedFeesDollars??decision.feePerContract*decision.contracts),
       decision.modeledWinProbability==null?null:String(decision.modeledWinProbability),
       String(decision.estimatedMaxDebitDollars),clientId]);
    if(!inserted.length){alreadyAttempted=true;reason='ALREADY_ATTEMPTED';continue;}
