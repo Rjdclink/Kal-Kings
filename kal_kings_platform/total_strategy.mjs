@@ -1,4 +1,5 @@
 /** Verified irreversible game-total screen; no outcome probabilities are invented. */
+import {estimatedKalshiBuyDebit} from './engine.mjs';
 const number=v=>v===null||v===undefined||v===''?NaN:Number(v);
 const finite=Number.isFinite;
 const denied=(reason,extra={})=>({allowed:false,strategy:'TOTAL_ALREADY_OVER',reason,...extra});
@@ -10,7 +11,7 @@ const codeFor=date=>{
  return String(x.getUTCDate()).padStart(2,'0')+code+String(x.getUTCFullYear()%100).padStart(2,'0');
 };
 export function assessAlreadyExceededTotal({
- game,market,bankroll,feePerContract,holdings=[],holdingsComplete=true,now=Date.now()
+ game,market,bankroll,feePerContract,feeMultiplier=null,holdings=[],holdingsComplete=true,now=Date.now()
 }={}){
  if(!game||game.state!=='in')return denied('NOT_LIVE');
  const observed=now-Date.parse(game.updatedAt||'');
@@ -43,16 +44,34 @@ export function assessAlreadyExceededTotal({
  if(!finite(ask)||ask<=0||ask>=1||!finite(depth)||depth<1||
    !finite(fee)||fee<0||!finite(cash)||cash<=0)
    return denied('UNEXECUTABLE_PRICE_OR_CASH');
- const net=1-ask-fee;
- if(net<=1e-9)return denied('NO_NET_POSITIVE_SETTLEMENT_MARGIN');
+ // Evaluate EACH affordable order size. A retail order's fee accumulator
+ // spans all its fills, so three 99-cent contracts may be net positive
+ // even though one individually is merely break-even.
+ const verifiedFee=feeMultiplier!==null;
+ if(verifiedFee&&(!finite(number(feeMultiplier))||number(feeMultiplier)<0||
+   number(feeMultiplier)>4))return denied('SERIES_FEE_NOT_VERIFIED');
  const budget=cash<100?Math.min(cash,cash*.25):Math.min(cash,cash*.02);
- if(ask+fee>budget)return denied('BANKROLL_RISK_BUDGET');
- const count=Math.min(50,Math.floor(depth),Math.floor(budget/(ask+fee)));
- if(count<1||ask*count+fee*count>cash+1e-8)return denied('CONTRACT_NOT_AFFORDABLE');
+ const maxCount=Math.min(50,Math.floor(depth),Math.floor(budget/ask));
+ let best=null;
+ for(let n=1;n<=maxCount;n++){
+   const debit=verifiedFee?
+     estimatedKalshiBuyDebit(n,ask,{feeMultiplier:number(feeMultiplier)}):
+     Math.round(n*(ask+fee)*10000)/10000;
+   if(debit>budget+1e-9||debit>cash+1e-9)continue;
+   const net=n-debit;
+   if(net<=1e-9)continue;
+   if(!best||net>best.net+1e-9||(Math.abs(net-best.net)<1e-9&&debit<best.debit)){
+     best={count:n,debit,net};
+   }
+ }
+ if(!best)return denied('NO_NET_POSITIVE_SETTLEMENT_MARGIN_OR_BUDGET');
+ const count=best.count,feeTotal=Math.max(0,best.debit-count*ask);
  return {allowed:true,strategy:'TOTAL_ALREADY_OVER',reason:'SCORE_ALREADY_OVER_RULES_VERIFIED',
   ticker,side:'yes',contracts:count,limitPrice:ask,feePerContract:fee,
-  netIfNormallySettledDollars:Math.round(net*count*10000)/10000,
-  estimatedMaxDebitDollars:Math.round((ask+fee)*count*10000)/10000,
+  estimatedFeesDollars:Math.round(feeTotal*10000)/10000,
+  feeBasis:verifiedFee?'VERIFIED_SERIES_MULTIPLIER':'CONSERVATIVE_SINGLE_CONTRACT_FEE',
+  netIfNormallySettledDollars:Math.round(best.net*10000)/10000,
+  estimatedMaxDebitDollars:Math.round(best.debit*10000)/10000,
   modeledWinProbability:null,modeledLossFrequency:null,conditionalPayoutDollars:count,
   score,totalLine:line,eventKey:series+'-'+dateCode+a+h,
   note:'Score is already above the official threshold; corrections, voids, delays, and execution fees remain possible.'};
