@@ -649,7 +649,7 @@ async function state(){
     memo('crypto',TTL.crypto,cryptoSpot),memo('polyaccount',TTL.polyaccount,polyAccountCheck),getTradingViewAlerts(),memo('trends',TTL.trends,cryptoTrends),tradingViewEnabled(),getAutoOrders(),getSoloOrders(),getPositionWatches(),getBotSettlements(),getQuantDiagnostics()
   ]);
   const value=(r,fallback)=>r.status==='fulfilled'?r.value:fallback;
-  const [predictive,strategyPerformance,directionalOrders]=await Promise.all([
+  const [predictive,strategyPerformance,directionalOrders,marketUniverse]=await Promise.all([
     getPredictiveStrategies().catch(()=>[]),getStrategyPerformance(sql).catch(()=>({status:'UNAVAILABLE'})),
     getDirectionalOrders(sql).catch(()=>[])]);
   const k=value(kr,[]),p=value(pr,[]),d=value(dr,{events:[],issues:['Odds provider unavailable']});
