@@ -475,7 +475,7 @@ async function collectPredictiveStrategies(){
    const fee=price>0&&price<1?
      Math.max(estimatedKalshiFee(1,price),estimatedKalshiFee(1,.5)):Infinity;
    const net=1-price-fee;
-   if(!(net>.005)||!(Number(x.totalMarket.yesDepth)>=1))return [];
+   if(!(net>1e-9)||!(Number(x.totalMarket.yesDepth)>=1))return [];
    return [{...x,strategy:'TOTAL_ALREADY_OVER',id:'total:'+x.totalMarket.ticker,
      market:x.totalMarket,game:x.totalGame,sourceVerified:true,
      marketMatchVerified:true,conditionalOutcomeVerified:true,
@@ -492,7 +492,7 @@ async function collectPredictiveStrategies(){
      const edge=p-ask-fee;
      return {...x,strategy:'LATE_GAME_LEAD',probability:p,
        modeledLossFrequency:1-p,estimatedMaxDebitDollars:ask+fee,
-       expectedNetDollars:edge,allowed:Number.isFinite(edge)&&edge>.02};
+       expectedNetDollars:edge,allowed:Number.isFinite(edge)&&edge>1e-9};
    })],{max:12});
  return {cryptoSignals:cryptos.length,sportsSignals:sports.length,stored:rows.length,ideas,universeScanned:universeResponse.status==='fulfilled'?universeResponse.value.scanned:0};
 }
