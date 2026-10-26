@@ -95,18 +95,33 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
    // A second unrelated 2% check would falsely veto profitable total orders.
    if(attempts>=4){reason='MAX_ORDER_ATTEMPTS_THIS_CYCLE';break;}
    const clientId=createId();
-   const inserted=await sql(`INSERT INTO kal_kings_directional_orders
+   const reservationParams=[ticker,String(idea.eventKey||ticker),idea.strategy,
+      decision.side,String(decision.contracts),String(decision.limitPrice),
+      String(decision.estimatedFeesDollars??decision.feePerContract*decision.contracts),
+      decision.modeledWinProbability==null?null:String(decision.modeledWinProbability),
+      String(decision.estimatedMaxDebitDollars),clientId];
+   let inserted=await sql(`INSERT INTO kal_kings_directional_orders
      (ticker,event_key,strategy,side,contracts,entry_price,estimated_fees,modeled_probability,
       max_debit,client_order_id,status,created_at,updated_at)
      VALUES($1,$2,$3,$4,$5::numeric,$6::numeric,$7::numeric,$8::numeric,
        $9::numeric,$10::uuid,'SUBMITTING',now(),now())
      ON CONFLICT(ticker) DO NOTHING RETURNING ticker`,
-     [ticker,String(idea.eventKey||ticker),idea.strategy,decision.side,
-      String(decision.contracts),String(decision.limitPrice),
-      String(decision.estimatedFeesDollars??decision.feePerContract*decision.contracts),
-      decision.modeledWinProbability==null?null:String(decision.modeledWinProbability),
-      String(decision.estimatedMaxDebitDollars),clientId]);
-   if(!inserted.length){alreadyAttempted=true;reason='ALREADY_ATTEMPTED';continue;}
+     reservationParams);
+   if(!inserted.length){
+     // A *confirmed* FOK zero-fill leaves no position. It may be retried
+     // after a short cooldown on an entirely fresh book and new client ID.
+     // Unknown or partial fills must never enter this recovery path.
+     inserted=await sql(`UPDATE kal_kings_directional_orders
+       SET status='SUBMITTING',event_key=$2,strategy=$3,side=$4,
+           contracts=$5::numeric,entry_price=$6::numeric,
+           estimated_fees=$7::numeric,modeled_probability=$8::numeric,
+           max_debit=$9::numeric,client_order_id=$10::uuid,
+           exchange_order_id=NULL,filled_count=0,updated_at=now()
+       WHERE ticker=$1 AND status='NOT_FILLED'
+         AND updated_at<now()-interval '15 seconds'
+       RETURNING ticker`,reservationParams);
+     if(!inserted.length){alreadyAttempted=true;reason='ALREADY_ATTEMPTED';continue;}
+   }
    attempts++;
    const request={ticker,client_order_id:clientId,
       side:decision.side==='no'?'ask':'bid',count:decision.contracts.toFixed(2),
