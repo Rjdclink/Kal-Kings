@@ -1,5 +1,6 @@
 /** Kal Kings independent live signal-feed adapters. Read-only; never place orders. */
 import {cryptoConsensus,planDirectionalTrade,assessLateGame,assessTotals} from './predictive_strategies.mjs';
+import {technicalIndicators,assessCryptoRegime,matchSportsOutcome,assessTotalsProjection} from './strategy_optimizer.mjs';
 const KALSHI='https://external-api.kalshi.com/trade-api/v2';
 const ESPN='https://site.api.espn.com/apis/site/v2/sports';
 const integer=n=>Number.isFinite(Number(n))?Number(n):null;
@@ -50,6 +51,52 @@ export async function spotMomentum(fetcher,symbol,now){
  const settled=await Promise.allSettled(providers);
  return settled.filter(x=>x.status==='fulfilled'&&x.value).map(x=>x.value);
 }
+
+const SPORTS_MARKET_SERIES={NFL:'KXNFLGAME',NBA:'KXNBAGAME',NHL:'KXNHLGAME'};
+const safe=val=>{const n=Number(val);return Number.isFinite(n)?n:null;};
+function easternDate(when){
+ const d=new Date(when);
+ if(!Number.isFinite(d.valueOf()))return null;
+ const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',
+   year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(d);
+ const get=x=>parts.find(p=>p.type===x)?.value;
+ return get('year')+'-'+get('month')+'-'+get('day');
+}
+export function parseLiveWinProbability(summary,event){
+ const no={homeProbability:null,awayProbability:null,sourceVerified:false,reason:'ESPN_PLAY_NOT_VERIFIED'};
+ const item=Array.isArray(summary?.winprobability)?summary.winprobability.at(-1):null;
+ const home=safe(item?.homeWinPercentage),tie=safe(item?.tiePercentage??0);
+ const scorePlay=String(event?.competitions?.[0]?.situation?.lastPlay?.id||''),
+    modelPlay=String(item?.playId||'');
+ if(!event?.id||String(summary?.header?.id)!==String(event.id)||!scorePlay||
+   scorePlay!==modelPlay||home===null||home<0||home>1||
+   tie===null||tie<0||tie>1||home+tie>1.001)return no;
+ return {homeProbability:home,awayProbability:Math.max(0,1-home-tie),
+    sourceVerified:true,source:'ESPN_LIVE_MODEL',modelPlayId:modelPlay,
+    reason:'MATCHED_CURRENT_ESPN_PLAY'};
+}
+export function selectSportsMarket(event,markets){
+ for(const market of Array.isArray(markets)?markets:[]){
+   if(!['open','active'].includes(market.status))continue;
+   if(matchSportsOutcome(event,market).matched)return market;
+ }
+ return null;
+}
+async function fetchSportsMarkets(fetcher,sport,now){
+ const series=SPORTS_MARKET_SERIES[sport];if(!series)return [];
+ try{
+   const j=await json(fetcher,`${KALSHI}/events?series_ticker=${series}&status=open&limit=200&with_nested_markets=true`);
+   return (j.events||[]).flatMap(e=>(e.markets||[]).map(m=>({
+     ticker:m.ticker,status:m.status,eventTicker:e.event_ticker,
+     yesAsk:safe(m.yes_ask_dollars),noAsk:safe(m.no_ask_dollars),
+     yesBid:safe(m.yes_bid_dollars),noBid:safe(m.no_bid_dollars),
+     yesDepth:safe(m.yes_ask_size_fp),noDepth:safe(m.no_ask_size_fp),
+     rulesPrimary:m.rules_primary||'',closeTime:m.close_time,
+     observedAt:new Date(now).toISOString(),eventTitle:e.title||'',marketTitle:m.title||'',
+     source:'Kalshi'})));
+ }catch{return []}
+}
+
 export async function fetchCryptoSignals({fetcher=fetch,now=Date.now(),symbols=['BTC','ETH','SOL','XRP','DOGE','ADA']}={}){
  const all=await Promise.all(symbols.filter(x=>candidates[x]).map(async symbol=>{
    const [s,m]=await Promise.allSettled([
