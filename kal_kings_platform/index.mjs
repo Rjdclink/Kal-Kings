@@ -22,6 +22,7 @@ import {assessLiveKalshiEntry,historyForExit,summarizeQuantState} from './quant_
 import {selectHistorySamples} from './history_sampler.mjs';
 import {fetchCryptoSignals,fetchSportsSignals} from './predictive_feeds.mjs';
 import {makeDirectionalRunner} from './directional_runner.mjs';
+import {makeManualExecutor} from './manual_execution.mjs';
 import {makeDirectionalLifecycle} from './directional_lifecycle.mjs';
 import {rankStrategies} from './strategy_optimizer.mjs';
 import {verifyExceededTotal} from './total_strategy.mjs';
@@ -540,6 +541,21 @@ const monitorDirectionalPositions=makeDirectionalLifecycle({sql,
 const runDirectional=makeDirectionalRunner({sql,fetchMarket:freshKalshiMarket,
   fetchOrderbook:getKalshiOrderbook,fetchFeeSchedule:getVerifiedKalshiFeeSchedule,
   submit:submitSoloOrder,createId:randomUUID,now:Date.now});
+const manualOrders=makeManualExecutor({sql,fetchAccount:getKalshiAccount,
+  fetchMarket:freshKalshiMarket,fetchOrderbook:getKalshiOrderbook,
+  fetchFeeSchedule:getVerifiedKalshiFeeSchedule,
+  submit:submitSoloOrder,createId:randomUUID,now:Date.now});
+async function getManualOrders(){
+ const rows=await sql(`SELECT id,ticker,side,contracts,status,
+   filled_count::text AS filled_count,limit_price::text AS limit_price,
+   max_debit::text AS max_debit,created_at,updated_at
+   FROM kal_kings_manual_intents
+   WHERE status<>'PREVIEW' ORDER BY created_at DESC LIMIT 12`);
+ return rows.map(r=>({id:r.id,ticker:r.ticker,side:r.side,
+   contracts:Number(r.contracts),status:r.status,filled:Number(r.filled_count),
+   price:Number(r.limit_price),maxDebit:Number(r.max_debit),
+   createdAt:r.created_at,updatedAt:r.updated_at}));
+}
 async function recordScannerStatus(result){
  const details={cryptoSignals:result.cryptoSignals||0,sportsSignals:result.sportsSignals||0,
    universeScanned:result.universeScanned||0,ideaCount:result.ideaCount||0,
@@ -807,6 +823,11 @@ export default {
       if(request.method==='GET'&&path==='/api/wagers')return reply({wagers:await getWagers()});
       if(request.method==='GET'&&path==='/api/automation/history')return reply({orders:await getAutoOrders()});
       if(request.method==='GET'&&path==='/api/kalshi/solo')return reply({orders:await getSoloOrders(),watches:await getPositionWatches(),settlements:await getBotSettlements()});
+      if(request.method==='GET'&&path==='/api/kalshi/manual/orders')return reply({orders:await getManualOrders()});
+      if(request.method==='POST'&&path==='/api/kalshi/manual/preview')
+        return reply(await manualOrders.preview(await request.json()));
+      if(request.method==='POST'&&path==='/api/kalshi/manual/execute')
+        return reply(await manualOrders.execute(await request.json()));
       if(request.method==='GET'&&path==='/api/kalshi/micro-test')return reply({test:await getOneTimeLiveTest()});
       if(request.method==='POST'&&path==='/api/kalshi/micro-test')return reply(await runOneTimeLiveTest(await request.json()));
       if(request.method==='GET'&&path==='/api/pairs')return reply({pairs:await getPairs()});
