@@ -19,9 +19,10 @@ test('absence of qualified Kalshi prices never manufactures a trade',()=>{
 test('two Kalshi legs have complementary book sides, exact prices and separate client IDs',()=>{
  const candidate=findKalshiSoloCandidates([quote()],{balance:100,now})[0];
  const [yes,no]=kalshiSoloLegs(candidate,['00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002']);
- assert.equal(yes.side,'bid');assert.equal(no.side,'ask');
+ assert.equal(yes.action,'buy');assert.equal(yes.side,'yes');
+ assert.equal(no.action,'buy');assert.equal(no.side,'no');
  assert.equal(yes.ticker,no.ticker);assert.equal(yes.time_in_force,'fill_or_kill');
- assert.equal(yes.price,'0.4300');assert.equal(no.price,'0.4900');
+ assert.equal(yes.yes_price_dollars,'0.4300');assert.equal(no.no_price_dollars,'0.5100');
  assert.equal(yes.count,no.count);
 });
 test('trade reporting counts only confirmed fills and flags unhedged legs',()=>{
