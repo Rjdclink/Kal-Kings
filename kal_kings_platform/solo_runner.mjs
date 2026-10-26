@@ -52,6 +52,9 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
       // the existing paired YES/NO engine has no viable opportunity.
       let predictive={ideas:[]};
       try{predictive=await scanPredictive()}catch{/* Never let an advisory feed cause blind orders or stop cash reconciliation. */}
+      scanMeta={...scanMeta,cryptoSignals:Number(predictive?.cryptoSignals)||0,
+        sportsSignals:Number(predictive?.sportsSignals)||0,universeScanned:Number(predictive?.universeScanned)||0,
+        ideaCount:Array.isArray(predictive?.ideas)?predictive.ideas.length:0};
       stage='ACCOUNT';
       if(monitored?.status==='ACCOUNT_UNAVAILABLE')return finish({status:'ACCOUNT_UNAVAILABLE'});
       const verifiedCash=Number(monitored?.freeCash);
