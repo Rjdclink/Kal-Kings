@@ -76,9 +76,10 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
         if(dir?.status==='HALTED_PENDING_RECONCILIATION')
           return finish({status:'HALTED_DIRECTIONAL_RECONCILIATION'});
       }
+      if(!scanMeta.ideaCount&&!scanMeta.directionalReason)scanMeta.directionalReason='NO_VERIFIED_DIRECTIONAL_CANDIDATES';
       stage='QUOTES';
       const candidates=findKalshiSoloCandidates(currentQuotes,{balance,now:now()});
-      if(!candidates.length)return finish({status:'NO_QUALIFYING_KALSHI_TRADE'});
+      if(!candidates.length)return finish({status:'NO_QUALIFYING_KALSHI_TRADE',reason:'NO_POSITIVE_YES_NO_SPREAD_AFTER_FEES'});
       for(const idea of candidates){
         // Requery the exact market immediately before submitting. The scanner
         // does not treat a 3-second UI refresh as proof of execution freshness.
