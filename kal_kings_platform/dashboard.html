@@ -247,5 +247,17 @@ $('#tvWebhookUrl').textContent=location.origin+'/webhooks/tradingview';
 $('#tvForm').addEventListener('submit',async ev=>{ev.preventDefault();$('#tvError').textContent='';try{await api('/api/tradingview/config','POST',{passphrase:$('#tvPassphrase').value});$('#tvPassphrase').value='';$('#tvError').className='success';$('#tvError').textContent='TradingView webhook is ready to receive your alerts.';await refresh();}catch(e){$('#tvError').textContent=e.message;}});
 if(admin) api('/api/session').then(()=>authenticated(true)).catch(()=>authenticated(false));else authenticated(false);
 setInterval(refresh,3000);
+let activeTradingTick=false;
+async function runFiveSecondTradingCheck(){
+ if(!admin||activeTradingTick)return;
+ activeTradingTick=true;
+ try{
+   const status=await api('/api/automation/tick','POST',{});
+   if(['DIRECTIONAL_FILLED','HEDGED','FILLED','PARTIALLY_FILLED'].includes(status.status))
+     await refresh();
+ }catch{/* The independent Neon minute scheduler remains active if the tab loses its network. */}
+ finally{activeTradingTick=false;}
+}
+setInterval(runFiveSecondTradingCheck,5000);
 })();
 </script></body></html>
