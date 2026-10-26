@@ -17,6 +17,8 @@ const mockFetch=async url=>{
  else if(url.includes('bitstamp.net'))value={data:{ohlc:ohlc.map(v=>({timestamp:String(v[0]),open:String(v[3]),close:String(v[4])}))}};
  else if(url.includes('api.gemini.com'))value=ohlc.map(v=>[v[0]*1000,v[3],110,90,v[4],1]);
  else if(url.includes('www.okx.com'))value={code:'0',data:ohlc.map(v=>[String(v[0]*1000),String(v[3]),'110','90',String(v[4]),'1'])};
+ else if(url.includes('api.kucoin.com'))value={code:'200000',data:ohlc.map(v=>[String(v[0]),String(v[3]),String(v[4]),'110','90','1'])};
+ else if(url.includes('api-pub.bitfinex.com'))value=ohlc.map(v=>[v[0]*1000,v[3],v[4],110,90,1]);
  else if(url.includes('kalshi.com'))value={events:[{event_ticker:'KXBTC15M-26OCT261210',markets:[market]}]};
  else throw Error('Unexpected URL: '+url);
  return {ok:true,json:async()=>value};
@@ -24,7 +26,8 @@ const mockFetch=async url=>{
 test('crypto spot and directional Kalshi market are collected without claiming an order',async()=>{
  const r=await fetchCryptoSignals({fetcher:mockFetch,now,symbols:['BTC']});
  assert.equal(r.length,1);assert.equal(r[0].direction,'UP');
- assert.equal(r[0].sources,5);assert.equal(r[0].marketTicker,market.ticker);
+ assert.equal(r[0].sources,7);assert.equal(r[0].agreeingSources,7);
+ assert.equal(r[0].allocationFraction,.4);assert.equal(r[0].marketTicker,market.ticker);
  assert.equal(r[0].allowed,false);
 });
 test('market consensus cannot be manufactured from one available API',async()=>{
@@ -154,6 +157,6 @@ test('crypto direction can be DOWN while its matching NO contract remains availa
  assert.equal(result[0].manualSide,'no');
 });
 
-test('all seven spot exchange names are recognized',()=>{assert.equal(7,7)});
+test('all seven distinct price venues report their own research observations',async()=>{const r=await fetchCryptoSignals({fetcher:mockFetch,now,symbols:['BTC']});assert.deepEqual(r[0].spotFeeds.map(x=>x.source).sort(),['bitfinex','bitstamp','coinbase','gemini','kraken','kucoin','okx']);});
 
 test('five opening quotes produce one settlement-window reference',()=>{const close='2026-10-26T14:15:00Z',source=['coinbase','kraken','bitstamp','gemini','okx'].map(x=>({source:x,last:103,candles:[{time:Date.parse('2026-10-26T14:00:00Z')/1000,open:100}]}));const r=calculateCryptoWindowReference(source,close);assert.equal(r.sourceCount,5);assert.equal(r.referencePrice,100)});
