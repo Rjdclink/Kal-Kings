@@ -22,6 +22,7 @@ import {assessLiveKalshiEntry,historyForExit,summarizeQuantState} from './quant_
 import {selectHistorySamples} from './history_sampler.mjs';
 import {fetchCryptoSignals,fetchSportsSignals} from './predictive_feeds.mjs';
 import {makeDirectionalRunner} from './directional_runner.mjs';
+import {selectCryptoIdea} from './crypto_candidate.mjs';
 import {makeManualExecutor} from './manual_execution.mjs';
 import {makeDirectionalLifecycle} from './directional_lifecycle.mjs';
 import {rankStrategies} from './strategy_optimizer.mjs';
