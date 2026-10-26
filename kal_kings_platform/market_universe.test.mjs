@@ -36,3 +36,10 @@ test('unpriced inactive and expired contracts cannot enter universe research lis
  assert.equal(normalizeKalshiMarket(market('KXBTC-26OCT26-B',{close_time:new Date(now-1000).toISOString()}),now),null);
  assert.equal(normalizeKalshiMarket(market('KXBTC-26OCT26-B',{yes_ask_dollars:'0.0000',no_ask_dollars:'1.0000'}),now),null);
 });
+
+test('a positive displayed bid-ask spread is not proof of net profitability',()=>{
+ const item=normalizeKalshiMarket(market('KXBTC15M-26OCT261230-30', {yes_ask_dollars:'.9890',no_ask_dollars:'.0120'}),now);
+ const out=rankUniverseIdeas([item]);
+ assert.equal(out[0].verifiedExpectedProfit,null);
+ assert.equal(out[0].eligibleForAutomation,false);
+});
