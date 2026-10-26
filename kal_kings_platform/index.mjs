@@ -4,7 +4,7 @@
  */
 import {readFileSync} from 'node:fs';
 import {createPrivateKey, sign, timingSafeEqual, createHash, createCipheriv, createDecipheriv, randomBytes, randomUUID, constants} from 'node:crypto';
-import {evaluatePair,monteCarlo,rankCandidates,quoteAge,validPrice,americanToDecimal,estimatedKalshiFee,cash} from './engine.mjs';
+import {evaluatePair,monteCarlo,rankCandidates,quoteAge,validPrice,americanToDecimal,estimatedKalshiFee,estimatedKalshiBuyDebit,cash} from './engine.mjs';
 import {riskPolicy,chooseHedge} from './strategy.mjs';
 import {favoriteWatchlist,directionalCandidates} from './sports.mjs';
 import {collectKalshiSports,collectPolymarketSports,topSports,cryptoUniverse,discoverQuotedGaps} from './feeds.mjs';
@@ -507,7 +507,7 @@ async function collectPredictiveStrategies(){
    .map(x=>{
      const p=Number(x.externalWinProbability),ask=Number(x.market?.yesAsk);
      const fee=Number.isFinite(ask)&&ask>0&&ask<1?
-       Math.max(estimatedKalshiFee(1,ask),estimatedKalshiFee(1,.5)):Infinity;
+       estimatedKalshiBuyDebit(1,ask)-ask:Infinity;
      const edge=p-ask-fee;
      return {...x,strategy:'LATE_GAME_LEAD',probability:p,
        modeledLossFrequency:1-p,estimatedMaxDebitDollars:ask+fee,
