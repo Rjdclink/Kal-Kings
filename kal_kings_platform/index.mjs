@@ -642,7 +642,7 @@ async function runCryptoCycle(source='dashboard'){
    VALUES($1::bigint,$2,'STARTED') ON CONFLICT DO NOTHING RETURNING tick_key`,
    [String(tick),source]);
  if(!lock.length)return {status:'ALREADY_CHECKED'};
- let status='SCANNER_UNAVAILABLE',scanned=0,candidates=0,ticker=null;
+ let status='SCANNER_UNAVAILABLE',scanned=0,candidates=0,ticker=null,lastReason=null;
  const leaseId='crypto-'+tick+'-'+source;
  let leased=false;
  try{
@@ -661,7 +661,7 @@ async function runCryptoCycle(source='dashboard'){
    else if(!ideas.length)status='NO_MODELED_POSITIVE_VALUE';
    else{
      const result=await runDirectional({ideas,account});
-     status=result.status;ticker=result.ticker||null;
+     status=result.status;ticker=result.ticker||null;lastReason=result.reason||null;
    }
    }
  }catch{status='CRYPTO_SCAN_UNAVAILABLE'}
