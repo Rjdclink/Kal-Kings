@@ -10,6 +10,24 @@ export function estimatedKalshiFee(count, price) {
   if (!Number.isInteger(count) || count < 1 || !validPrice(price)) throw new RangeError('Invalid contract price or quantity');
   return Math.ceil((0.07 * count * Number(price) * (1 - Number(price))) * 100 - 1e-9) / 100;
 }
+/** Conservative retail order debit for a Kalshi YES buy executed at or
+ * below the limit price. Includes the general quadratic taker fee and
+ * non-direct member cent rounding across all fills of one order.
+ * Non-standard series must supply their VERIFIED fee multiplier separately.
+ */
+export function estimatedKalshiBuyDebit(count,limitPrice,{feeMultiplier=1,balancePrecision=.01}={}){
+ const p=Number(limitPrice),m=Number(feeMultiplier),grid=Number(balancePrecision);
+ if(!Number.isInteger(count)||count<1||count>10000||!validPrice(p)||
+    !Number.isFinite(m)||m<0||m>4||![.01,.0001].includes(grid))
+   throw new RangeError('Invalid Kalshi cost estimation inputs');
+ // Unit price plus its exact quadratic fee is monotonic in p for m<=4,
+ // so any price improvement cannot exceed this upper debit bound.
+ const feeRaw=0.07*m*count*p*(1-p);
+ const fillsPrecisionReserve=count*.000001;
+ const raw=count*p+feeRaw+fillsPrecisionReserve;
+ const upper=Math.ceil(raw/grid-1e-9)*grid;
+ return Math.round(upper*10000)/10000;
+}
 export function quoteAge(quote, now = Date.now()) {
   const t = new Date(quote?.observedAt ?? quote?.updatedAt ?? '').getTime();
   return Number.isFinite(t) && now >= t ? now - t : Infinity;
