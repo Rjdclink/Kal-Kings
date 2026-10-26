@@ -19,9 +19,9 @@ export async function additionalSpotCandles(fetcher,symbol,venue){
  const rows=['okx','kucoin'].includes(venue)?data.data:data;
  if(!Array.isArray(rows))throw Error('Malformed venue candle data');
  return rows.slice(0,90).filter(Array.isArray).map(row=>{
-  const i=venue==='gemini'?4:2;
+  const i=['gemini','okx'].includes(venue)?4:2;
   return {time:timestamp(row[0]),open:Number(row[1]),close:Number(row[i]),
-    high:Number(row[venue==='gemini'?2:venue==='kucoin'?3:3]),
+    high:Number(row[venue==='gemini'||venue==='okx'?2:3]),
     low:Number(row[venue==='gemini'?3:venue==='kucoin'?4:4]),
     volume:Number(row[5])};
  }).filter(x=>Number.isFinite(x.time)&&x.open>0&&x.close>0);
