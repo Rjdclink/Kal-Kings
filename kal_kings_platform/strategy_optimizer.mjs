@@ -95,7 +95,7 @@ export function matchSportsOutcome(event,market){
 export function assessKalshiValue({
  market,side,probability,probabilitySource,sourceVerified=false,
  marketMatchVerified=false,bankroll,holdings,feePerContract,
- now=Date.now(),maxLossProbability=.15,minimumEdge=.02
+ now=Date.now(),maxLossProbability=.15,minimumEdge=0
 }={}){
  const no=(reason,extra={})=>({allowed:false,reason,...extra});
  if(!marketMatchVerified||sourceVerified!==true||probabilitySource!=='ESPN_LIVE_MODEL')
@@ -115,7 +115,7 @@ export function assessKalshiValue({
  if(holdings.some(x=>x?.ticker===market.ticker&&num(x.position)!==0))
    return no('EXISTING_EVENT_EXPOSURE');
  const debit=px+fee,edge=p-debit;
- if(edge<minimumEdge-1e-9)return no('NO_NET_POSITIVE_EDGE',{edge:round(edge)});
+ if(edge<=Math.max(0,minimumEdge)+1e-9)return no('NO_NET_POSITIVE_EDGE',{edge:round(edge)});
  const budget=Math.min(cash,cash<100?cash*.25:cash*.02);
  if(debit>budget+1e-9)return no('INSUFFICIENT_RISK_BUDGET');
  const count=cash<100?1:Math.min(Math.floor(depth),Math.floor(cash/debit),Math.max(1,Math.floor(budget/debit)),10);
