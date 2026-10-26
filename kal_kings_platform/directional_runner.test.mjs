@@ -142,3 +142,37 @@ test('changed consensus during final refresh stops crypto execution',async()=>{
  const r=await f.runner({ideas:[candidate],account:{balance:15,holdings:[],positionsComplete:true,status:'VERIFIED'}});
  assert.equal(r.status,'NO_VERIFIED_DIRECTIONAL_EDGE');assert.equal(f.orders.length,0);
 });
+
+test('confirmed zero-fill can be retried on a fresh quote after cooldown, never immediately',async()=>{
+ let clock=now,tries=0,save=null;
+ const records=new Map();
+ const sql=async(q,a=[])=>{
+  if(q.includes('SELECT ticker FROM kal_kings_directional_orders'))return [];
+  if(q.includes('INSERT INTO kal_kings_directional_orders')){
+   if(records.has(a[0]))return [];
+   records.set(a[0],{status:'SUBMITTING',changed:clock});return [{ticker:a[0]}];
+  }
+  if(q.includes("SET status='SUBMITTING'")){
+   const x=records.get(a[0]);
+   if(!x||x.status!=='NOT_FILLED'||clock-x.changed<15000)return [];
+   x.status='SUBMITTING';x.changed=clock;return [{ticker:a[0]}];
+  }
+  if(q.includes('UPDATE kal_kings_directional_orders')){
+   const x=records.get(a[0]);x.status=a[1];x.changed=clock;return [];
+  }
+  return [];
+ };
+ const f=fixture({sql,now:()=>clock,createId:()=> '123e4567-e89b-42d3-a456-'+String(++tries).padStart(12,'0'),
+  fetchMarket:async id=>({...idea.market,id,ticker:id,closeTime:new Date(clock+180000).toISOString(),observedAt:new Date(clock).toISOString()}),
+  submit:async order=>{f.orders.push(order);return {order_id:'ok'+f.orders.length,fill_count:f.orders.length===1?'0.00':order.count}}});
+ const account={balance:15,holdings:[],positionsComplete:true,status:'VERIFIED'};
+ const first=await f.runner({ideas:[idea],account});
+ assert.equal(first.reason,'CONFIRMED_NO_FILL');
+ assert.equal(f.orders.length,1);
+ const second=await f.runner({ideas:[idea],account});
+ assert.equal(second.status,'ALREADY_ATTEMPTED');assert.equal(f.orders.length,1);
+ clock+=16000;
+ const later=await f.runner({ideas:[{...idea,updatedAt:new Date(clock).toISOString()}],account});
+ assert.equal(later.status,'FILLED');assert.equal(f.orders.length,2);
+ assert.notEqual(f.orders[0].client_order_id,f.orders[1].client_order_id);
+});
