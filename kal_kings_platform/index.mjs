@@ -14,7 +14,7 @@ import {sharpFeedOdds} from './sharp.mjs';
 import {buildKalshiHedgePlan,kalshiV2Order} from './orders.mjs';
 import {buildTradeBoard,executionSummary,bankrollTradeStatus} from './trade_board.mjs';
 import {findKalshiSoloCandidates,summarizeSoloOrders} from './kalshi_solo.mjs';
-import {makeSoloRunner,isNeonSoloTrigger} from './solo_runner.mjs';
+import {makeSoloRunner,isNeonSoloTrigger,activeScanSlot} from './solo_runner.mjs';
 import {makeKalshiLifecycle} from './kalshi_lifecycle.mjs';
 import {cashAvailableForReinvestment} from './kalshi_manager.mjs';
 import {normalizeKalshiBook,monteCarloExitDecision} from './quant.mjs';
