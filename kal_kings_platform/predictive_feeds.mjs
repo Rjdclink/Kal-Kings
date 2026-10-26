@@ -216,7 +216,7 @@ export async function fetchSportsSignals({fetcher=fetch,now=Date.now(),sports=['
     for(const x of result)if(x.status==='fulfilled')weatherMap[x.value.city]=x.value.weather;
    }
    const observations=normalizeScoreboard({...j,events:live},sport,now,{weatherByCity:weatherMap,injuriesByTeam:injuryMap});
-   const markets=await fetchSportsMarkets(fetcher,sport,now);
+   const [markets,totalMarkets]=await Promise.all([fetchSportsMarkets(fetcher,sport,now),fetchSportsMarkets(fetcher,sport,now,'total')]);
    return await Promise.all(observations.map(async signal=>{
      const event=live.find(x=>x.id===signal.id),contest=event?.competitions?.[0];
      const home=contest?.competitors?.find(x=>x.homeAway==='home'),
