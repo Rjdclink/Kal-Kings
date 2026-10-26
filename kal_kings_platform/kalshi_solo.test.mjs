@@ -32,3 +32,10 @@ test('trade reporting counts only confirmed fills and flags unhedged legs',()=>{
  assert.equal(s.fullyHedgedTrades,1);assert.equal(s.unhedgedPositions,1);assert.equal(s.notFilled,1);
  assert.equal(s.realizedProfitDollars,null);
 });
+
+test('a one-cent positive two-sided paired spread is eligible without arbitrary extra cent',()=>{
+ const q={id:'KXNFLGAME-26OCT26DALPHI-PHI',yesAsk:.42,noAsk:.53,yesDepth:2,noDepth:2,observedAt:new Date(1793016000000).toISOString()};
+ const results=findKalshiSoloCandidates([q],{balance:15,now:1793016000000});
+ assert.ok(results.length>0);
+ assert.ok(results[0].netProfitDollars>0);
+});
