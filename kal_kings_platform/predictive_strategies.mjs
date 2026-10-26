@@ -50,7 +50,7 @@ export function cryptoConsensus(rows,{symbol,now=Date.now(),minSources=5,minRetu
 /** Real trades may only use independently validated, matching Kalshi-specific
  * outcome probabilities; market votes or past spot momentum are insufficient.
  */
-export function planDirectionalTrade({consensus,market,bankroll,feePerContract,model,now=Date.now(),lossFrequencyLimit=.15}={}){
+export function planDirectionalTrade({consensus,market,bankroll,feePerContract,model,now=Date.now(),lossFrequencyLimit=.30}={}){
  if(!consensus||!['UP','DOWN'].includes(consensus.direction)||consensus.agreeingSources<5||
    !(consensus.allocationFraction>=.2))return denied('NO_INDEPENDENT_CONSENSUS');
  const asset=String(consensus.symbol||'').toUpperCase(),series='KX'+asset+'15M';
