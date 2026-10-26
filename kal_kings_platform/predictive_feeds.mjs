@@ -205,7 +205,9 @@ export async function fetchCryptoSignals({fetcher=fetch,now=Date.now(),symbols=[
    // A public quote and a historical direction ARE actionable for a person
    // to review, but do not by themselves prove a profitable automated order.
    const signalDirection=consensus.direction;
-   const tradeDirection=regime.direction==='MIXED'?'UNKNOWN':signalDirection;
+   // Historical RSI/MACD are secondary observations. A verified 5-of-7
+   // independent spot consensus remains the primary direction signal.
+   const tradeDirection=signalDirection;
    const manualSide=market&&(tradeDirection==='UP'?'yes':tradeDirection==='DOWN'?'no':null);
    return {symbol,direction:tradeDirection,sources:consensus.sources,
     technical,regime:regime.regime,signalStrength:regime.signalStrength,forecastCalibrated:false,
