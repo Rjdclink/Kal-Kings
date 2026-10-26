@@ -33,7 +33,7 @@ import {recordForecasts,resolveForecasts,getStrategyPerformance,getDirectionalOr
 import {planOneTimeMicroOrder,interpretMicroReceipt} from './live_trade_test.mjs';
 
 const HTML=readFileSync(new URL('./dashboard.html',import.meta.url),'utf8');
-const KALSHI='https://external-api.kalshi.com';
+const KALSHI='https://api.elections.kalshi.com';
 const KALSHI_PUBLIC='https://api.elections.kalshi.com';
 const POLY='https://gateway.polymarket.us';
 const SPORTS=['americanfootball_nfl','basketball_nba','baseball_mlb','icehockey_nhl'];
