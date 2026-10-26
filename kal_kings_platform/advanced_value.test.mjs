@@ -60,3 +60,5 @@ test('flat or negative independently modeled net value cannot qualify',()=>{
    probabilitySource:'ESPN_LIVE_MODEL',bankroll:15,holdings:[],feePerContract:.01,now:NOW});
  assert.equal(v.allowed,false);
 });
+
+test('crypto simulation uses five votes and 20 percent bankroll allocation without extra historical holdout gate',()=>{const m={ticker:'KXBTC15M-26OCT261415-15',status:'active',yesAsk:.40,yesDepth:20,observedAt:new Date(NOW).toISOString()};const r=assessKalshiValue({market:m,side:'yes',probability:.94,probabilitySource:'CRYPTO_SCENARIO_PROXY',sourceVerified:true,marketMatchVerified:true,bankroll:15,holdings:[],feePerContract:.01,minimumEdge:.02,maxBankrollFraction:.2,now:NOW});assert.equal(r.allowed,true);assert.equal(r.contracts,7);assert.ok(r.estimatedMaxDebitDollars<=3)});
