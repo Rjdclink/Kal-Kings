@@ -585,6 +585,37 @@ const runSolo=makeSoloRunner({fetchAccount:getKalshiAccount,fetchQuotes:publicKa
  quantRiskGate,recordSnapshots:recordQuantSamples,scanPredictive:collectPredictiveStrategies,
  monitorDirectional:monitorDirectionalPositions,executeDirectional:runDirectional,recordScan:recordScannerStatus,
  sql,submit:submitSoloOrder,createId:randomUUID,now:Date.now});
+/** Three-second user-session execution checks; Neon scheduled minutes remain
+ * the unattended fallback. Database bucket guards prevent duplicate cycles.
+ */
+async function runCryptoCycle(source='dashboard'){
+ const tick=Math.floor(Date.now()/3000);
+ const lock=await sql(`INSERT INTO kal_kings_crypto_cycles(tick_key,source,status)
+   VALUES($1::bigint,$2,'STARTED') ON CONFLICT DO NOTHING RETURNING tick_key`,
+   [String(tick),source]);
+ if(!lock.length)return {status:'ALREADY_CHECKED'};
+ let status='SCANNER_UNAVAILABLE',scanned=0,candidates=0,ticker=null;
+ try{
+   const [signals,account]=await Promise.all([
+     memo('predictiveCrypto',30000,()=>fetchCryptoSignals({now:Date.now()})),
+     getKalshiAccount()
+   ]);
+   scanned=signals.length;
+   const ideas=signals.map(x=>selectCryptoIdea(x,{now:Date.now()})).filter(Boolean);
+   candidates=ideas.length;
+   if(account?.status!=='VERIFIED'||account.positionsComplete!==true)
+     status='ACCOUNT_UNAVAILABLE';
+   else if(!ideas.length)status='NO_MODELED_POSITIVE_VALUE';
+   else{
+     const result=await runDirectional({ideas,account});
+     status=result.status;ticker=result.ticker||null;
+   }
+ }catch{status='CRYPTO_SCAN_UNAVAILABLE'}
+ await sql(`UPDATE kal_kings_crypto_cycles SET status=$2,research_count=$3::integer,
+   candidate_count=$4::integer,traded_ticker=$5,finished_at=now()
+   WHERE tick_key=$1::bigint`,[String(tick),status,String(scanned),String(candidates),ticker]);
+ return {status,scanned,candidates,ticker};
+}
 async function getPositionWatches(){
  const rows=await sql(`SELECT ticker,position_side,status,entry_price::text AS entry_price,
  high_bid::text AS high_bid,exit_fill_count::text AS exit_fill_count,updated_at
