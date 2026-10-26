@@ -52,9 +52,10 @@ export function kalshiSoloLegs(candidate,clientOrderIds){
   if(!Number.isInteger(candidate.count)||candidate.count<1||!validPrice(candidate.yesPrice)||!validPrice(candidate.noPrice)||candidate.yesPrice+candidate.noPrice>=1)throw RangeError('Invalid complementary prices');
   const ids=clientOrderIds;
   if(ids.some(id=>!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(id)))throw RangeError('Invalid order identifiers');
-  const base={ticker:candidate.marketTicker,count:candidate.count.toFixed(2),time_in_force:'fill_or_kill',self_trade_prevention_type:'taker_at_cross',cancel_order_on_pause:true};
-  return [{...base,side:'bid',price:candidate.yesPrice.toFixed(4),client_order_id:ids[0]},
-    {...base,side:'ask',price:(1-candidate.noPrice).toFixed(4),client_order_id:ids[1]}];
+  const base={ticker:candidate.marketTicker,count:candidate.count,action:'buy',type:'limit',
+    time_in_force:'fill_or_kill',self_trade_prevention_type:'taker_at_cross',cancel_order_on_pause:true};
+  return [{...base,side:'yes',yes_price_dollars:candidate.yesPrice.toFixed(4),client_order_id:ids[0]},
+    {...base,side:'no',no_price_dollars:candidate.noPrice.toFixed(4),client_order_id:ids[1]}];
 }
 export function summarizeSoloOrders(orders=[]){
   const rows=Array.isArray(orders)?orders:[];
