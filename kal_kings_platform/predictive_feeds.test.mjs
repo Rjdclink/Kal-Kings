@@ -144,6 +144,8 @@ test('crypto direction can be DOWN while its matching NO contract remains availa
     return {ok:true,json:async()=>({error:[],result:{XBTUSD:decreasing.map(x=>[x.time,String(x.open),'110','90',String(x.close),'100','2',1])}})};
   if(url.includes('bitstamp.net'))
     return {ok:true,json:async()=>({data:{ohlc:decreasing.map(x=>({timestamp:String(x.time),open:String(x.open),close:String(x.close)}))}})};
+  if(url.includes('api.gemini.com'))return {ok:true,json:async()=>decreasing.map(x=>[x.time*1000,x.open,110,90,x.close,1])};
+  if(url.includes('www.okx.com'))return {ok:true,json:async()=>({code:'0',data:decreasing.map(x=>[String(x.time*1000),String(x.open),'110','90',String(x.close),'1'])})};
   throw Error('Unknown provider');
  };
  const result=await fetchCryptoSignals({fetcher,now,symbols:['BTC']});
