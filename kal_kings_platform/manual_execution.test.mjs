@@ -72,3 +72,30 @@ test('manual execution rechecks verified bankroll before submitting',async()=>{
  const r=await f.executor.execute({intentId:p.intentId});
  assert.equal(r.status,'NOT_ELIGIBLE');assert.equal(f.orders.length,0);
 });
+
+test('explicit Kalshi HTTP 403 is a rejected order, not an uncertain fill',async()=>{
+ const f=setup({submit:async()=>{const e=new Error('Kalshi refused this order');e.httpStatus=403;throw e}});
+ const p=await f.executor.preview({ticker:market.id,side:'no',count:1});
+ const receipt=await f.executor.execute({intentId:p.intentId});
+ assert.equal(receipt.status,'REJECTED');
+ assert.equal(receipt.reason,'KALSHI_ORDER_PERMISSION_DENIED');
+ assert.equal(f.intents.get(p.intentId).status,'REJECTED');
+});
+test('confirmed 400 price validation error does not falsely report an ambiguous execution',async()=>{
+ const f=setup({submit:async()=>{const e=new Error('Kalshi returned 400');e.httpStatus=400;throw e}});
+ const p=await f.executor.preview({ticker:market.id,side:'yes',count:1});
+ const receipt=await f.executor.execute({intentId:p.intentId});
+ assert.equal(receipt.status,'REJECTED');
+ assert.equal(receipt.reason,'KALSHI_ORDER_INVALID');
+});
+test('uncertain orders are reconciled from read-only exchange order history by client ID',async()=>{
+ const f=setup();
+ const p=await f.executor.preview({ticker:market.id,side:'no',count:1});
+ const intent=f.intents.get(p.intentId);intent.status='UNCERTAIN';
+ const seen=await f.executor.reconcilePending({
+   readOrderHistory:async ticker=>[{ticker,client_order_id:intent.client_order_id,
+     order_id:'safe-exchange-order',fill_count_fp:'1.00',status:'executed'}]
+ });
+ assert.equal(seen.confirmed,1);
+ assert.equal(f.intents.get(p.intentId).status,'FILLED');
+});
