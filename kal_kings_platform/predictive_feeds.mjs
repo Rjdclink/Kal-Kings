@@ -237,8 +237,10 @@ export async function fetchSportsSignals({fetcher=fetch,now=Date.now(),sports=['
      const market=selected?selectSportsMarket(game,markets):null;
      const prediction=selected===home?.team?.abbreviation?probability.homeProbability:
        selected===away?.team?.abbreviation?probability.awayProbability:null;
+     const oddsLine=Number(contest?.odds?.find(x=>Number.isFinite(Number(x.overUnder)))?.overUnder);
+     const totalsMarket=selectTotalsMarket({...game,totalLine:oddsLine},totalMarkets);
      const totalProjection=assessTotalsProjection({...signal.gameContext,
-       totalLine:signal.totals.totalLine||Number(contest?.odds?.[0]?.overUnder)||null,
+       totalLine:totalsMarket?.floorStrike??oddsLine,
        weather:signal.weather,injuries:signal.injuries,now});
      return {...signal,externalWinProbability:prediction,sourceVerified:probability.sourceVerified,
        marketMatchVerified:Boolean(market),market:market||null,
