@@ -82,3 +82,22 @@ test('predictive provider failure cannot create unsafe trades',async()=>{
  assert.equal(result.status,'NO_QUALIFYING_KALSHI_TRADE');
  assert.equal(f.calls.length,0);
 });
+
+test('directional opportunity executes independently when no same-market arbitrage exists',async()=>{
+ let count=0,monitored=0;
+ const f=fixture({fetchQuotes:async()=>[{...q,noAsk:.65}],
+   fetchAccount:async()=>({status:'VERIFIED',balance:15,holdings:[],positionsComplete:true}),
+   scanPredictive:async()=>({ideas:[{id:'eligible-live-game'}]}),
+   monitorDirectional:async()=>{monitored++;return {pendingReview:0}},
+   executeDirectional:async({ideas,account})=>{count++;assert.equal(account.balance,15);assert.equal(ideas.length,1);return {status:'FILLED',ticker:'KXGAME'};}
+ });
+ const result=await f.run(runInput);
+ assert.equal(result.status,'DIRECTIONAL_FILLED');assert.equal(count,1);assert.equal(monitored,1);
+ assert.equal(f.calls.length,0);
+});
+test('uncertain directional execution ends the cycle without any paired-arbitrage attempt',async()=>{
+ const f=fixture({scanPredictive:async()=>({ideas:[{id:'x'}]}),
+  executeDirectional:async()=>({status:'UNCERTAIN',ticker:'KXGAME'})});
+ const result=await f.run(runInput);
+ assert.equal(result.status,'DIRECTIONAL_UNCERTAIN');assert.equal(f.calls.length,0);
+});
