@@ -29,7 +29,8 @@ test('independently verified positive-value live leader may submit one bounded o
  const f=fixture();
  const r=await f.runner({ideas:[idea],account:{balance:15,holdings:[],positionsComplete:true,status:'VERIFIED'}});
  assert.equal(r.status,'FILLED');assert.equal(f.orders.length,1);
- assert.equal(f.orders[0].ticker,ticker);assert.equal(f.orders[0].side,'bid');
+ assert.equal(f.orders[0].ticker,ticker);assert.equal(f.orders[0].action,'buy');
+ assert.equal(f.orders[0].side,'yes');assert.equal(f.orders[0].yes_price_dollars!==undefined,true);
 });
 test('unverified, stale, expensive, and unfunded plans never send orders',async()=>{
  const cases=[{...idea,sourceVerified:false},{...idea,updatedAt:new Date(now-30000).toISOString()},
@@ -132,8 +133,9 @@ test('verified crypto DOWN uses an exchange NO purchase after fresh five-source 
    fetchFinalConsensus:async()=>({direction:'DOWN',agreeingSources:5,allocationFraction:.2,
       marketTicker:ticker,updatedAt:new Date(now).toISOString()})});
  const r=await f.runner({ideas:[candidate],account:{balance:15,holdings:[],positionsComplete:true,status:'VERIFIED'}});
- assert.equal(r.status,'FILLED');assert.equal(f.orders[0].side,'ask');
- assert.equal(f.orders[0].price,'0.6900');assert.ok(r.contracts>1);
+ assert.equal(r.status,'FILLED');assert.equal(f.orders[0].action,'buy');
+ assert.equal(f.orders[0].side,'no');assert.equal(f.orders[0].no_price_dollars,'0.3100');
+ assert.equal(f.orders[0].price,undefined);assert.ok(r.contracts>1);
 });
 test('changed consensus during final refresh stops crypto execution',async()=>{
  const ticker='KXBTC15M-26OCT261215-15';
