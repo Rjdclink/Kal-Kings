@@ -465,6 +465,21 @@ async function collectPredictiveStrategies(){
      FROM jsonb_to_recordset($1::jsonb) AS p(asset text,strategy text,direction text,status text,
        source_count integer,market_ticker text,details jsonb)`,[JSON.stringify(rows)]);
  }
+ const totalIdeas=sports.flatMap(x=>{
+   if(!x.totalMarket||!x.totalGame)return [];
+   const proof=verifyExceededTotal({game:x.totalGame,market:x.totalMarket,now});
+   if(!proof.eligible)return [];
+   const price=Number(x.totalMarket.yesAsk);
+   const fee=price>0&&price<1?
+     Math.max(estimatedKalshiFee(1,price),estimatedKalshiFee(1,.5)):Infinity;
+   const net=1-price-fee;
+   if(!(net>.005)||!(Number(x.totalMarket.yesDepth)>=1))return [];
+   return [{...x,strategy:'TOTAL_ALREADY_OVER',id:'total:'+x.totalMarket.ticker,
+     market:x.totalMarket,game:x.totalGame,sourceVerified:true,
+     marketMatchVerified:true,conditionalOutcomeVerified:true,
+     modeledLossFrequency:null,expectedNetDollars:net,
+     estimatedMaxDebitDollars:price+fee,allowed:true}];
+ });
  const ideas=rankStrategies(sports.filter(x=>x.lateGame?.direction&&x.sourceVerified&&
    x.marketMatchVerified&&x.market&&Number.isFinite(Number(x.externalWinProbability))&&
    x.externalWinProbability>=.85&&x.modelPlayId)
