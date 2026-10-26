@@ -556,6 +556,23 @@ const runDirectional=makeDirectionalRunner({sql,fetchMarket:freshKalshiMarket,
   fetchOrderbook:getKalshiOrderbook,fetchFeeSchedule:getVerifiedKalshiFeeSchedule,
   fetchFinalConsensus:async symbol=>(await fetchCryptoSignals({symbols:[symbol],runSimulation:false}))[0],
   submit:submitSoloOrder,createId:randomUUID,now:Date.now});
+/** Read-only reconciliation. Kalshi's V2 writes are read back through
+ * the authenticated /portfolio/orders listing. Never retry unknown writes.
+ */
+async function fetchKalshiOrdersForTicker(ticker){
+ if(!/^[A-Z0-9_-]{4,128}$/.test(ticker||''))throw Error('Invalid market');
+ let cursor=null,orders=[];
+ for(let page=0;page<3;page++){
+   const params=new URLSearchParams({ticker,limit:'100'});
+   if(cursor)params.set('cursor',cursor);
+   const data=await kalshiPrivate('/trade-api/v2/portfolio/orders?'+params);
+   if(!Array.isArray(data?.orders))throw Error('Kalshi order read unavailable');
+   orders.push(...data.orders);
+   cursor=typeof data.cursor==='string'&&data.cursor?data.cursor:null;
+   if(!cursor)break;
+ }
+ return orders;
+}
 const manualOrders=makeManualExecutor({sql,fetchAccount:getKalshiAccount,
   fetchMarket:freshKalshiMarket,fetchOrderbook:getKalshiOrderbook,
   fetchFeeSchedule:getVerifiedKalshiFeeSchedule,
