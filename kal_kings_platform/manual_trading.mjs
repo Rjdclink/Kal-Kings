@@ -54,9 +54,8 @@ export function buildManualBuyOrder(plan,clientOrderId){
  const yesScale=plan.side==='yes'?plan.limitPrice:1-plan.limitPrice;
  if(!ok(yesScale)||yesScale<=0||yesScale>=1)throw RangeError('Invalid order price');
  return {ticker:plan.ticker,client_order_id:clientOrderId,
-   action:'buy',side:plan.side,count:plan.count,
-   ...(plan.side==='yes'?{yes_price_dollars:plan.limitPrice.toFixed(4)}:
-     {no_price_dollars:plan.limitPrice.toFixed(4)}),
-   type:'limit',time_in_force:'fill_or_kill',
-   self_trade_prevention_type:'taker_at_cross',cancel_order_on_pause:true};
+   side:plan.side==='yes'?'bid':'ask',
+   count:plan.count.toFixed(2),price:yesScale.toFixed(4),
+   time_in_force:'fill_or_kill',self_trade_prevention_type:'taker_at_cross',
+   cancel_order_on_pause:true};
 }
