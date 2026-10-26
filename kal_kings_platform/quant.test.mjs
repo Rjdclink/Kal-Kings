@@ -117,3 +117,5 @@ test('order-book cost bound includes worst taker fee at price-improved fills',()
  assert.equal(candidate.yesPrice,.65);
  assert.ok(candidate.yesFee>=.06,'fee upper bound must use peak p(1-p) across executable range');
 });
+
+test('a valid one-sided Kalshi book remains tradable for that one side',()=>{const b=normalizeKalshiBook({orderbook_fp:{yes_dollars:null,no_dollars:[['.4500','3.00']]}});assert.equal(b.yesAsks.length,1);assert.equal(b.noAsks.length,0);assert.equal(b.yesAsks[0].price,.55)});
