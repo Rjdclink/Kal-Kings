@@ -53,12 +53,15 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
      [fresh,book]=await Promise.all([fetchMarket(ticker),fetchOrderbook(ticker)]);
      book=normalizeKalshiBook(book);
    }catch{reason='ORDERBOOK_OR_REQUOTE_UNAVAILABLE';continue;}
-   if(!fresh||fresh.id!==ticker||!['open','active'].includes(fresh.status)||!book.yesAsks?.length){
+   if(!fresh||fresh.id!==ticker||!['open','active'].includes(fresh.status)||!(isCrypto&&idea.side==='no'?book.noAsks?.length:book.yesAsks?.length)){
      reason='LIVE_MARKET_NOT_OPEN';continue;
    }
    if(!Number.isFinite(Date.parse(fresh.closeTime||''))||
-      Date.parse(fresh.closeTime)<=now()+30000){reason='MARKET_CLOSING';continue;}
-   const best=book.yesAsks[0];
+      Date.parse(fresh.closeTime)<=now()+10000){reason='MARKET_CLOSING';continue;}
+   const best=isCrypto&&idea.side==='no'?book.noAsks[0]:book.yesAsks[0];
+   if(isCrypto&&(!/CF Benchmarks/i.test(fresh.rulesPrimary||'')||
+      !/simple average/i.test(fresh.rulesPrimary||'')||
+      !/at least/i.test(fresh.rulesPrimary||''))){reason='SETTLEMENT_RULES_UNVERIFIED';continue;}
    // The venue supplies series-specific multipliers. Unsupported flat fees,
    // missing metadata, or an unavailable schedule are not proof of profit.
    let feeSchedule=null;
