@@ -51,7 +51,7 @@ export function planDirectionalTrade({consensus,market,bankroll,feePerContract,m
    consensus.agreement<.75)return denied('NO_INDEPENDENT_CONSENSUS');
  const asset=String(consensus.symbol||'').toUpperCase(),series='KX'+asset+'15M';
  if(!['BTC','ETH','SOL','XRP','DOGE','ADA'].includes(asset)||market?.seriesTicker!==series||
-   !String(market?.ticker||'').startsWith(series+'-')||market.status!=='open')
+   !String(market?.ticker||'').startsWith(series+'-')||!['open','active'].includes(market.status))
    return denied('UNVERIFIED_MARKET_MAPPING');
  const rules=String(market.rulesPrimary||'');
  if(!/CF Benchmarks/i.test(rules)||!/average/i.test(rules)||!/(before|prior)/i.test(rules)||
