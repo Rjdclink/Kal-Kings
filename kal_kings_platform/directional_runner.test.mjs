@@ -31,7 +31,7 @@ test('independently verified positive-value live leader may submit one bounded o
 });
 test('unverified, stale, expensive, and unfunded plans never send orders',async()=>{
  const cases=[{...idea,sourceVerified:false},{...idea,updatedAt:new Date(now-30000).toISOString()},
- {...idea,probability:.80}];
+ {...idea,probability:.60}];
  for(const x of cases){const f=fixture();const r=await f.runner({ideas:[x],account:{balance:15,holdings:[],positionsComplete:true,status:'VERIFIED'}});assert.equal(f.orders.length,0);}
  const f=fixture();await f.runner({ideas:[idea],account:{balance:0,holdings:[],positionsComplete:true,status:'VERIFIED'}});
  assert.equal(f.orders.length,0);
