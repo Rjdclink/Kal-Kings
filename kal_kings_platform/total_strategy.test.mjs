@@ -60,7 +60,7 @@ test('a breakeven or losing over trade is never approved',()=>{
 
 test('batched 99-cent totals may be positive after actual aggregated fee rounding',()=>{
  const x=assessAlreadyExceededTotal({game,market:{...market,yesAsk:.99},
-   bankroll:15,feePerContract:0.01,now});
+   bankroll:15,feePerContract:0.01,feeMultiplier:1,now});
  assert.equal(x.allowed,true);
  assert.equal(x.contracts,3);
  assert.ok(x.netIfNormallySettledDollars>0);
