@@ -493,14 +493,15 @@ async function collectPredictiveStrategies(){
    const fee=price>0&&price<1?
      Math.max(estimatedKalshiFee(1,price),estimatedKalshiFee(1,.5)):Infinity;
    const net=1-price-fee;
-   if(!(net>1e-9)||!(Number(x.totalMarket.yesDepth)>=1))return [];
+   if(!(price>0&&price<1)||!(Number(x.totalMarket.yesDepth)>=1))return [];
    return [{...x,strategy:'TOTAL_ALREADY_OVER',id:'total:'+x.totalMarket.ticker,
      market:x.totalMarket,game:x.totalGame,sourceVerified:true,
      marketMatchVerified:true,conditionalOutcomeVerified:true,
-     modeledLossFrequency:null,expectedNetDollars:net,
-     estimatedMaxDebitDollars:price+fee,allowed:true}];
+     modeledLossFrequency:null,expectedNetDollars:null,
+     estimatedMaxDebitDollars:null,allowed:false,
+     requiresFeeVerification:true,possibleSettlementMargin:1-price}];
  });
- const ideas=rankStrategies([...totalIdeas,...sports.filter(x=>x.lateGame?.direction&&x.sourceVerified&&
+ const rankedLate=rankStrategies(sports.filter(x=>x.lateGame?.direction&&x.sourceVerified&&
    x.marketMatchVerified&&x.market&&Number.isFinite(Number(x.externalWinProbability))&&
    x.externalWinProbability>=.85&&x.modelPlayId)
    .map(x=>{
@@ -511,7 +512,11 @@ async function collectPredictiveStrategies(){
      return {...x,strategy:'LATE_GAME_LEAD',probability:p,
        modeledLossFrequency:1-p,estimatedMaxDebitDollars:ask+fee,
        expectedNetDollars:edge,allowed:Number.isFinite(edge)&&edge>1e-9};
-   })],{max:12});
+   }),{max:12});
+ // Already-exceeded totals get FIRST re-price and fee verification.
+ // Their preliminary quotes do not claim a guaranteed profit.
+ const ideas=[...totalIdeas.sort((a,b)=>Date.parse(a.market.closeTime)-Date.parse(b.market.closeTime)),
+   ...rankedLate].slice(0,12);
  return {cryptoSignals:cryptos.length,sportsSignals:sports.length,stored:rows.length,ideas,universeScanned:universeResponse.status==='fulfilled'?universeResponse.value.scanned:0};
 }
 async function getPredictiveStrategies(){
