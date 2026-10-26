@@ -486,21 +486,26 @@ async function collectPredictiveStrategies(){
        source_count integer,market_ticker text,details jsonb)`,[JSON.stringify(rows)]);
  }
  const totalIdeas=sports.flatMap(x=>{
-   if(!x.totalMarket||!x.totalGame)return [];
-   const proof=verifyExceededTotal({game:x.totalGame,market:x.totalMarket,now});
-   if(!proof.eligible)return [];
-   const price=Number(x.totalMarket.yesAsk);
-   const fee=price>0&&price<1?
-     Math.max(estimatedKalshiFee(1,price),estimatedKalshiFee(1,.5)):Infinity;
-   const net=1-price-fee;
-   if(!(price>0&&price<1)||!(Number(x.totalMarket.yesDepth)>=1))return [];
-   return [{...x,strategy:'TOTAL_ALREADY_OVER',id:'total:'+x.totalMarket.ticker,
-     market:x.totalMarket,game:x.totalGame,sourceVerified:true,
-     marketMatchVerified:true,conditionalOutcomeVerified:true,
-     modeledLossFrequency:null,expectedNetDollars:null,
-     estimatedMaxDebitDollars:null,allowed:false,
-     requiresFeeVerification:true,possibleSettlementMargin:1-price}];
- });
+   const markets=x.exceededTotalsMarkets?.length?x.exceededTotalsMarkets:
+     (x.totalMarket?[x.totalMarket]:[]);
+   if(!x.totalGame)return [];
+   return markets.flatMap(m=>{
+     const proof=verifyExceededTotal({game:x.totalGame,market:m,now});
+     if(!proof.eligible)return [];
+     const price=Number(m.yesAsk);
+     if(!(price>0&&price<1)||!(Number(m.yesDepth)>=1))return [];
+     // Discovery deliberately does not assume a single-share fee proves
+     // profitability. The final Kalshi order check tests actual quantity,
+     // official fee multiplier, executable book depth, and free cash.
+     return [{...x,strategy:'TOTAL_ALREADY_OVER',id:'total:'+m.ticker,
+       market:m,game:x.totalGame,sourceVerified:true,
+       marketMatchVerified:true,conditionalOutcomeVerified:true,
+       modeledLossFrequency:null,expectedNetDollars:null,
+       estimatedMaxDebitDollars:null,allowed:false,
+       requiresFeeVerification:true,possibleSettlementMargin:1-price}];
+   });
+ }).sort((a,b)=>b.possibleSettlementMargin-a.possibleSettlementMargin||
+    Date.parse(a.market.closeTime)-Date.parse(b.market.closeTime));
  const rankedLate=rankStrategies(sports.filter(x=>x.lateGame?.direction&&x.sourceVerified&&
    x.marketMatchVerified&&x.market&&Number.isFinite(Number(x.externalWinProbability))&&
    x.externalWinProbability>=.85&&x.modelPlayId)
@@ -515,8 +520,7 @@ async function collectPredictiveStrategies(){
    }),{max:12});
  // Already-exceeded totals get FIRST re-price and fee verification.
  // Their preliminary quotes do not claim a guaranteed profit.
- const ideas=[...totalIdeas.sort((a,b)=>Date.parse(a.market.closeTime)-Date.parse(b.market.closeTime)),
-   ...rankedLate].slice(0,12);
+ const ideas=[...totalIdeas.slice(0,8),...rankedLate].slice(0,12);
  return {cryptoSignals:cryptos.length,sportsSignals:sports.length,stored:rows.length,ideas,universeScanned:universeResponse.status==='fulfilled'?universeResponse.value.scanned:0};
 }
 async function getPredictiveStrategies(){
