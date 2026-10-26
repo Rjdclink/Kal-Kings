@@ -76,7 +76,15 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
       const hasMonitoredCash=monitored?.status==='MONITORED' && Number.isFinite(verifiedCash) && verifiedCash>=0;
       const account=hasMonitoredCash?monitored:await fetchAccount();
       const balance=hasMonitoredCash?verifiedCash:Number(account?.balance);
-      if(!Number.isFinite(balance)||balance<=0)return finish({status:'UNFUNDED'});
+      if(!Number.isFinite(balance)||balance<=0){
+        // Preserve public quote histories when no cash is available; no
+        // simulated wins or unattended orders are credited.
+        try{
+          const quotes=await fetchQuotes();
+          if(Array.isArray(quotes)&&quotes.length)await recordSnapshots(quotes);
+        }catch{/* Unfunded account must not turn provider outages into orders. */}
+        return finish({status:'UNFUNDED'});
+      }
       if(Array.isArray(predictive?.ideas)&&predictive.ideas.length){
         stage='DIRECTIONAL';
         const dir=await executeDirectional({ideas:predictive.ideas,
