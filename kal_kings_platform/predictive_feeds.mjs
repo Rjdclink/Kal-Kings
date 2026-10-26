@@ -9,7 +9,7 @@ const integer=n=>Number.isFinite(Number(n))?Number(n):null;
 const timeout=()=>typeof AbortSignal==='undefined'?undefined:AbortSignal.timeout(7000);
 async function json(fetcher,url){
  const r=await fetcher(url,{method:'GET',signal:timeout(),redirect:'error'});
- if(!r?.ok)throw Error('Data provider unavailable');
+ if(!r?.ok)throw Error('HTTP_'+Number(r?.status||0));
  return r.json();
 }
 const candidates={
@@ -54,7 +54,15 @@ export async function spotMomentum(fetcher,symbol,now){
   return momentum(rows,{symbol,source,now});
  });
  const settled=await Promise.allSettled(providers);
- return settled.filter(x=>x.status==='fulfilled'&&x.value).map(x=>x.value);
+ const valid=settled.filter(x=>x.status==='fulfilled'&&x.value).map(x=>x.value);
+ valid.missingSources=settled.flatMap((x,i)=>{
+  if(x.status==='fulfilled'&&x.value)return [];
+  const message=x.status==='rejected'?String(x.reason?.message||''):'';
+  return [{source:names[i],reason:/^HTTP_\d+$/.test(message)?message:
+   /timeout|abort/i.test(message)?'TIMEOUT':
+   x.status==='fulfilled'?'INVALID_OR_STALE_CANDLES':'PROVIDER_FAILURE'}];
+ });
+ return valid;
 }
 
 const SPORTS_MARKET_SERIES={NFL:'KXNFLGAME',NBA:'KXNBAGAME',NHL:'KXNHLGAME'};
@@ -227,6 +235,7 @@ export async function fetchCryptoSignals({fetcher=fetch,now=Date.now(),symbols=[
       (tradeDirection==='UP'?model.lowerYesProbability:1-model.upperYesProbability):null,
     spreadPct:consensus.spreadPct??null,spotPrice:consensus.medianPrice??null,
     spotFeeds:consensus.observations.map(x=>({source:x.source,returnPct:x.returnPct})),
+    missingSources:spot.missingSources||[],
     marketTicker:market?.ticker||null,market:market||null,yesAsk:market?.yesAsk??null,noAsk:market?.noAsk??null,
     closeTime:market?.closeTime||null,
     manualSide,manualReviewAvailable:Boolean(manualSide),signalIsForecast:false,
