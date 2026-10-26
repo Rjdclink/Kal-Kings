@@ -31,7 +31,7 @@ function momentum(rows,{symbol,source,now}){
 }
 export async function spotMomentum(fetcher,symbol,now){
  const pair=candidates[symbol];if(!pair)return [];
- const names=['coinbase','kraken','bitstamp'];
+ const names=['coinbase','kraken','bitstamp','gemini','okx','kucoin','bitfinex'];
  const providers=names.map(async source=>{
   let j,rows;
   if(source==='coinbase'){
