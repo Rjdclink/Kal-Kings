@@ -221,7 +221,7 @@ export async function fetchCryptoSignals({fetcher=fetch,now=Date.now(),symbols=[
     allowed:false,eligibleForAutomation:false,
     reason:!market?'NO_MATCHING_ACTIVE_KALSHI_CONTRACT':'INDEPENDENT_PROBABILITY_NOT_ESTABLISHED',
     status:!market?'NO_OPEN_MATCHING_KALSHI_MARKET':consensus.reason,
-    updatedAt:new Date(now).toISOString()};
+    updatedAt:new Date(Math.abs(Date.now()-now)<120000?Date.now():now).toISOString()};
  }));
  return all;
 }
