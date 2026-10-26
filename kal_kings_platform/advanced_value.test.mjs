@@ -62,3 +62,22 @@ test('flat or negative independently modeled net value cannot qualify',()=>{
 });
 
 test('crypto simulation uses five votes and 20 percent bankroll allocation without extra historical holdout gate',()=>{const m={ticker:'KXBTC15M-26OCT261415-15',status:'active',yesAsk:.40,yesDepth:20,observedAt:new Date(NOW).toISOString()};const r=assessKalshiValue({market:m,side:'yes',probability:.94,probabilitySource:'CRYPTO_SCENARIO_PROXY',sourceVerified:true,marketMatchVerified:true,bankroll:15,holdings:[],feePerContract:.01,minimumEdge:.02,maxBankrollFraction:.2,now:NOW});assert.equal(r.allowed,true);assert.equal(r.contracts,7);assert.ok(r.estimatedMaxDebitDollars<=3)});
+
+test('positive expected value at 78 percent may trade under raised 30 percent modeled-loss ceiling',()=>{
+ const quote={...market,yesAsk:.45,yesDepth:20};
+ const d=assessKalshiValue({market:quote,side:'yes',probability:.78,probabilitySource:'ESPN_LIVE_MODEL',
+  sourceVerified:true,marketMatchVerified:true,bankroll:15,holdings:[],
+  feePerContract:.02,maxLossProbability:.30,now:NOW});
+ assert.equal(d.allowed,true);assert.ok(d.expectedNetDollars>0);
+});
+test('30 percent modeled loss cap still blocks forecasts below 70 percent even with cheap prices',()=>{
+ const d=assessKalshiValue({market:{...market,yesAsk:.20},side:'yes',probability:.69,
+  probabilitySource:'CRYPTO_SCENARIO_PROXY',sourceVerified:true,marketMatchVerified:true,
+  bankroll:15,holdings:[],feePerContract:.02,maxLossProbability:.30,
+  minimumEdge:.02,maxBankrollFraction:.2,now:NOW});
+ assert.equal(d.allowed,false);
+});
+test('ranked sports can include positive expected value with a quarter modeled loss frequency',()=>{
+ const idea={eventKey:'another',allowed:true,expectedNetDollars:.12,estimatedMaxDebitDollars:.45,modeledLossFrequency:.25};
+ assert.equal(rankStrategies([idea]).length,1);
+});
