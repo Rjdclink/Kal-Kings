@@ -115,3 +115,21 @@ test('worker records why it found no opportunity, including broad market survey 
  assert.equal(last.status,'NO_QUALIFYING_KALSHI_TRADE');
  assert.equal(last.universeScanned,500);
 });
+
+test('an unavailable legacy eight-series sports feed cannot stop independently verified value trading',async()=>{
+ let scanned=0,approved=0;
+ const f=fixture({fetchQuotes:async()=>{throw Error('sports market provider timeout')},
+    scanPredictive:async()=>{scanned++;return {ideas:[{id:'valid-total'}]};},
+    fetchAccount:async()=>({status:'VERIFIED',balance:15,holdings:[],positionsComplete:true}),
+    executeDirectional:async()=>{approved++;return {status:'FILLED',ticker:'KXNFLTOTAL-TEST'};}});
+ const out=await f.run(runInput);
+ assert.equal(out.status,'DIRECTIONAL_FILLED');
+ assert.equal(scanned,1);assert.equal(approved,1);
+});
+test('missing legacy quotes never produce fabricated two-leg orders',async()=>{
+ const f=fixture({fetchQuotes:async()=>{throw Error('timeout')},
+    scanPredictive:async()=>({ideas:[]})});
+ const out=await f.run(runInput);
+ assert.equal(out.status,'NO_VALID_LEGACY_QUOTES');
+ assert.equal(f.calls.length,0);
+});
