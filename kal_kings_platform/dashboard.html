@@ -38,7 +38,7 @@ const riskText=policy=>{if(!policy)return 'ON · awaiting funds';const base=poli
 const time=iso=>{const ms=Date.now()-Date.parse(iso||'');if(!Number.isFinite(ms))return 'No source time';return ms<0?'Clock skew':ms<1000?'Just now':Math.floor(ms/1000)+'s ago'};
 let admin=sessionStorage.getItem('kalkings_admin')||'',data=null,active='sports',opMode='gaps',pending=false,seq=0;
 async function api(path,method='GET',body){const response=await fetch(path,{method,cache:'no-store',headers:{'x-kal-kings-admin':admin,'content-type':'application/json'},body:body==null?undefined:JSON.stringify(body)});const result=await response.json();if(!response.ok)throw Error(result.error||'Request unavailable');return result;}
-function authenticated(ok){$('#loginCover').classList.toggle('hidden',ok);if(ok)refresh();}
+function authenticated(ok){$('#loginCover').classList.toggle('hidden',ok);if(ok){refresh();refreshKalshiStatus();}}
 $('#loginForm').addEventListener('submit',async ev=>{ev.preventDefault();admin=$('#token').value.trim();try{await api('/api/session');sessionStorage.setItem('kalkings_admin',admin);$('#loginError').textContent='';authenticated(true);}catch{$('#loginError').textContent='Invalid or unconfigured Neon administrator token.';admin='';}});
 $('#logout').onclick=()=>{admin='';sessionStorage.removeItem('kalkings_admin');authenticated(false);};
 function renderStatus(){const d=data;$('#kBalance').textContent=money(d.balances.kalshi);$('#dBalance').textContent=money(d.balances.draftkings);$('#combined').textContent=d.balances.kalshi!=null&&d.balances.draftkings!=null?money(d.balances.kalshi+d.balances.draftkings):'—';$('#kStatus').textContent=d.kalshiStatus==='VERIFIED'?'Connected':'Not linked';$('#kStatus').className='badge '+(d.kalshiStatus==='VERIFIED'?'':'warn');$('#kHoldings').textContent=(d.holdings||[]).length?d.holdings.length+' market positions reported':'No positions shown';$('#opCount').textContent=d.opportunities.length+' vetted · '+(d.priceGaps||[]).length+' gaps';$('#riskBudget').textContent=riskText(d.riskPolicy);$('#aiShift').textContent=d.agent?`${d.agent.slot+1}/4`:'—';$('#aiRole').textContent=d.agent?`${d.agent.name}: ${d.agent.role}. Next shift ${new Date(d.agent.nextUTC).toLocaleTimeString()}.`:'Local analysis unavailable';$('#liveDot').classList.remove('off');$('#liveLabel').textContent='Dashboard online';$('#synced').textContent='Checked '+new Date(d.asOf).toLocaleTimeString();}
@@ -276,6 +276,19 @@ $('#tvWebhookUrl').textContent=location.origin+'/webhooks/tradingview';
 $('#tvForm').addEventListener('submit',async ev=>{ev.preventDefault();$('#tvError').textContent='';try{await api('/api/tradingview/config','POST',{passphrase:$('#tvPassphrase').value});$('#tvPassphrase').value='';$('#tvError').className='success';$('#tvError').textContent='TradingView webhook is ready to receive your alerts.';await refresh();}catch(e){$('#tvError').textContent=e.message;}});
 if(admin) api('/api/session').then(()=>authenticated(true)).catch(()=>authenticated(false));else authenticated(false);
 setInterval(refresh,3000);
+async function refreshKalshiStatus(){
+ if(!admin)return;
+ try{
+  const result=await api('/api/kalshi/status');
+  if(!data)data={};
+  data.cryptoCycleStatus=result.cryptoCycleStatus||{status:'UNAVAILABLE'};
+  data.scannerStatus=result.scannerStatus||{status:'UNAVAILABLE'};
+  data.manualOrderHistory=result.manualOrderHistory||[];
+  renderCryptoAndManualStatus();
+ }catch{
+  $('#cryptoCycleStatus').textContent='Scanner connection unavailable';
+ }
+}
 let activeTradingTick=false;
 async function runFiveSecondTradingCheck(){
  if(!admin||activeTradingTick)return;
@@ -285,8 +298,9 @@ async function runFiveSecondTradingCheck(){
    if(['DIRECTIONAL_FILLED','HEDGED','FILLED','PARTIALLY_FILLED'].includes(status.status))
      await refresh();
  }catch{/* The independent Neon minute scheduler remains active if the tab loses its network. */}
- finally{activeTradingTick=false;}
+ finally{activeTradingTick=false;refreshKalshiStatus();}
 }
 setInterval(runFiveSecondTradingCheck,5000);
+setInterval(refreshKalshiStatus,10000);
 })();
 </script></body></html>
