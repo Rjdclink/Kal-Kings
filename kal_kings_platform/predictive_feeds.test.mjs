@@ -7,7 +7,7 @@ const ohlc=[
  [epoch-900,1,1,100,101,1],
  [epoch-600,1,1,101,102,1],
  [epoch-300,1,1,102,103,1],
- [epoch-10,1,1,103,104,1]
+ [epoch,1,1,103,104,1]
 ];
 const market={ticker:'KXBTC15M-26OCT261210-10',status:'open',yes_ask_dollars:'0.6800',no_ask_dollars:'0.3300',yes_ask_size_fp:'12.00',no_ask_size_fp:'8.00',close_time:new Date(now+10*60000).toISOString(),rules_primary:"The sixty seconds CF Benchmarks BRTI average before expiry compared to the average at least as high before the window started."};
 const mockFetch=async url=>{
