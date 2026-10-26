@@ -37,3 +37,11 @@ test('trailing exit policy adapts to volatility without discarding stop protecti
 });
 
 test('adaptive stop volatility is measured from observed executable bids rather than a fixed guess',()=>{const rows=[.75,.74,.70,.69,.73,.67].map((bid,i)=>({bid,observedAt:new Date(Date.parse('2026-10-26T12:00:00Z')+i*1000).toISOString()}));assert.ok(bidVolatilityPct(rows)>0);assert.equal(bidVolatilityPct(rows.slice(0,2)),null)});
+
+test('clinched live totals can rank without fictitious model-loss percentages',()=>{
+ const candidate={id:'total',eventKey:'game-total',strategy:'TOTAL_ALREADY_OVER',allowed:true,
+   conditionalOutcomeVerified:true,modeledLossFrequency:null,expectedNetDollars:.08,
+   estimatedMaxDebitDollars:.9};
+ assert.equal(rankStrategies([candidate]).length,1);
+ assert.equal(rankStrategies([{...candidate,conditionalOutcomeVerified:false}]).length,0);
+});
