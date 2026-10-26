@@ -82,9 +82,15 @@ export function parseLiveWinProbability(summary,event){
  const home=safe(item?.homeWinPercentage),tie=safe(item?.tiePercentage??0);
  const scorePlay=String(event?.competitions?.[0]?.situation?.lastPlay?.id||''),
     modelPlay=String(item?.playId||'');
- if(!event?.id||String(summary?.header?.id)!==String(event.id)||!scorePlay||
-   scorePlay!==modelPlay||home===null||home<0||home>1||
-   tie===null||tie<0||tie>1||home+tie>1.001)return no;
+ const summaryState=summary?.header?.competitions?.[0]?.status?.type?.state;
+ // ESPN's public live scoreboards can omit situation.lastPlay entirely.
+ // Use the matched LIVE summary's latest model play when the scoreboard
+ // offers no play ID; if both IDs are published they must agree.
+ if(!event?.id||String(summary?.header?.id)!==String(event.id)||!modelPlay||
+   (scorePlay&&scorePlay!==modelPlay)||
+   (summaryState&&summaryState!=='in')||
+   home===null||home<0||home>1||tie===null||tie<0||tie>1||
+   home+tie>1.001)return no;
  return {homeProbability:home,awayProbability:Math.max(0,1-home-tie),
     sourceVerified:true,source:'ESPN_LIVE_MODEL',modelPlayId:modelPlay,
     reason:'MATCHED_CURRENT_ESPN_PLAY'};
