@@ -65,11 +65,12 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
    lastCheckedTicker=validTicker(ticker)?ticker:null;lastCheckedStrategy=String(idea?.strategy||'').slice(0,64);
    const isTotal=idea?.strategy==='TOTAL_ALREADY_OVER';
    const isCrypto=idea?.strategy==='CRYPTO_DIRECTIONAL_CONSENSUS';
-   if(!['LATE_GAME_LEAD','TOTAL_ALREADY_OVER','CRYPTO_DIRECTIONAL_CONSENSUS'].includes(idea?.strategy)||
-      idea.sourceVerified!==true||idea.marketMatchVerified!==true||!validTicker(ticker)||
-      (!isTotal&&!isCrypto&&idea.lateGameVerified!==true)||
-      !Number.isFinite(age(idea.updatedAt,clock))||age(idea.updatedAt,clock)<0||
-      age(idea.updatedAt,clock)>(isCrypto?30_000:20_000))continue;
+   if(!['LATE_GAME_LEAD','TOTAL_ALREADY_OVER','CRYPTO_DIRECTIONAL_CONSENSUS'].includes(idea?.strategy)){reason='UNSUPPORTED_STRATEGY';continue;}
+   if(idea.sourceVerified!==true){reason='INDEPENDENT_SOURCE_NOT_VERIFIED';continue;}
+   if(idea.marketMatchVerified!==true||!validTicker(ticker)){reason='MARKET_MATCH_UNAVAILABLE';continue;}
+   if(!isTotal&&!isCrypto&&idea.lateGameVerified!==true){reason='LATE_GAME_SIGNAL_NOT_VERIFIED';continue;}
+   const ideaAge=age(idea.updatedAt,clock);
+   if(!Number.isFinite(ideaAge)||ideaAge<0||ideaAge>(isCrypto?30_000:20_000)){reason='SIGNAL_STALE_OR_INVALID';continue;}
    let finalConsensus=null;
    if(isCrypto){
     const modelAge=now()-Date.parse(idea.model?.observedAt||'');
