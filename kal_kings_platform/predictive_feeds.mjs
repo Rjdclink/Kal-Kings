@@ -19,7 +19,7 @@ function matchesSportsTicker(sport,series,dateCode,away,home,ticker){
  return false;
 }
 const FEED_TEAM_TICKER_ALIASES={NBA:{BKN:['BRK'],NYK:['NY'],GSW:['GS'],NOP:['NO'],SAS:['SA'],UTA:['UTAH'],PHX:['PHO']},NHL:{LAK:['LA'],SJS:['SJ'],TBL:['TB'],NJD:['NJ'],VGK:['VEG']},MLB:{CWS:['CHW'],KCR:['KC'],SDP:['SD'],SFG:['SF'],TBR:['TB'],WSN:['WSH'],ATH:['OAK']},NFL:{WSH:['WAS'],JAC:['JAX'],LAR:['LA'],LAC:['SD'],LV:['OAK']},CFB:{},CBB:{},WNBA:{},EPL:{},MLS:{}};
-const teamAliases=(sport,team)=>[...new Set([String(team||'').toUpperCase(),...(FEED_TEAM_TICKER_ALIASES[sport]?.[String(team||'').toUpperCase()]||[])])];
+const feedTeamAliases=(sport,team)=>[...new Set([String(team||'').toUpperCase(),...(FEED_TEAM_TICKER_ALIASES[sport]?.[String(team||'').toUpperCase()]||[])])];
 const safe=val=>{if(val===null||val===undefined||val==='')return null;const n=Number(val);return Number.isFinite(n)?n:null;};
 // Kalshi's legacy quote fields are integer cents; *_dollars fields are dollars.
 const kalshiPrice=(dollars,cents)=>{
