@@ -69,7 +69,7 @@ const SPORTS_TOTAL_SERIES={NFL:'KXNFLTOTAL',NBA:'KXNBATOTAL',NHL:'KXNHLTOTAL',ML
 function matchesSportsTicker(sport,series,dateCode,away,home,ticker){
  const t=String(ticker||'').toUpperCase(),aways=teamAliases(sport,away),homes=teamAliases(sport,home);
  for(const a of aways)for(const h of homes){
-  if(sport==='MLB'){if(new RegExp('^'+series+'-'+dateCode+'\\d{4}(?:'+a+h+'|'+h+a+')-').test(t))return true;}
+  if(sport==='MLB'){if(new RegExp('^'+series+'-'+dateCode+'\\\\d{4}(?:'+a+h+'|'+h+a+')-').test(t))return true;}
   else if(t.startsWith(series+'-'+dateCode+a+h+'-')||t.startsWith(series+'-'+dateCode+h+a+'-'))return true;
  }
  return false;
