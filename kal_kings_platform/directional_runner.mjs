@@ -5,10 +5,8 @@
  */
 import {estimatedKalshiBuyDebit} from './engine.mjs';
 import {normalizeKalshiBook} from './quant.mjs';
-import {assessKalshiValue} from './strategy_optimizer.mjs';
 import {assessAlreadyExceededTotal} from './total_strategy.mjs';
 import {planLateGameOrder} from './sports_allocation.mjs';
-import {cryptoConfidenceScore} from './crypto_candidate.mjs';
 const validTicker=t=>/^[A-Z0-9_-]{4,128}$/.test(t||'');
 const age=(v,now)=>now-Date.parse(v||'');
 /**
@@ -43,7 +41,7 @@ export function resolveExecutableAskBook(book,market,side,now=Date.now()){
    source:'MARKET_TOP_OF_BOOK',reason:null};
 }
 export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSchedule,
- fetchFinalConsensus,submit,createId,now=Date.now}){
+ submit,createId,now=Date.now}){
  return async function run({ideas=[],account}={}){
   const clock=now();
   if(account?.status!=='VERIFIED'||account?.positionsComplete!==true||
@@ -53,9 +51,8 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
     WHERE status IN ('SUBMITTING','UNCERTAIN','PARTIALLY_FILLED','EXIT_SUBMITTING','EXIT_UNCERTAIN') LIMIT 1`);
   if(pending.length)return {status:'HALTED_PENDING_RECONCILIATION'};
   let reason='NO_CURRENT_INDEPENDENT_EDGE',alreadyAttempted=false,attempts=0,candidateChecks=0,lastCheckedTicker=null,lastCheckedStrategy=null;
-  // Sports are the primary execution queue: already-exceeded totals first,
-  // then verified late-game leads, and crypto only after sports candidates.
-  const priority={TOTAL_ALREADY_OVER:0,LATE_GAME_LEAD:1,CRYPTO_DIRECTIONAL_CONSENSUS:2};
+  // Only the two sports strategies are permitted to submit automated orders.
+  const priority={TOTAL_ALREADY_OVER:0,LATE_GAME_LEAD:1};
   const orderedIdeas=(Array.isArray(ideas)?ideas:[]).slice().sort((a,b)=>
     (priority[a?.strategy]??99)-(priority[b?.strategy]??99)||
     (Number(b?.maxAllocationFraction)||0)-(Number(a?.maxAllocationFraction)||0));
@@ -64,27 +61,12 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
    const m=idea?.market,ticker=m?.ticker;
    lastCheckedTicker=validTicker(ticker)?ticker:null;lastCheckedStrategy=String(idea?.strategy||'').slice(0,64);
    const isTotal=idea?.strategy==='TOTAL_ALREADY_OVER';
-   const isCrypto=idea?.strategy==='CRYPTO_DIRECTIONAL_CONSENSUS';
-   if(!['LATE_GAME_LEAD','TOTAL_ALREADY_OVER','CRYPTO_DIRECTIONAL_CONSENSUS'].includes(idea?.strategy)){reason='UNSUPPORTED_STRATEGY';continue;}
+   if(!['LATE_GAME_LEAD','TOTAL_ALREADY_OVER'].includes(idea?.strategy)){reason='UNSUPPORTED_STRATEGY';continue;}
    if(idea.sourceVerified!==true){reason='INDEPENDENT_SOURCE_NOT_VERIFIED';continue;}
    if(idea.marketMatchVerified!==true||!validTicker(ticker)){reason='MARKET_MATCH_UNAVAILABLE';continue;}
-   if(!isTotal&&!isCrypto&&idea.lateGameVerified!==true){reason='LATE_GAME_SIGNAL_NOT_VERIFIED';continue;}
    const ideaAge=age(idea.updatedAt,clock);
-   if(!Number.isFinite(ideaAge)||ideaAge<0||ideaAge>(isCrypto?30_000:20_000)){reason='SIGNAL_STALE_OR_INVALID';continue;}
-   let finalConsensus=null;
-   if(isCrypto){
-    const modelAge=now()-Date.parse(idea.model?.observedAt||'');
-    if(!['yes','no'].includes(idea.side)||idea.model?.status!=='ESTIMATED'||
-       Number(idea.model.trials)<2500||modelAge<0||modelAge>30000||
-       !ticker.startsWith('KX'+idea.symbol+'15M-'))continue;
-    try{finalConsensus=await fetchFinalConsensus(idea.symbol,idea)}catch{reason='CONSENSUS_UNAVAILABLE';continue;}
-    const elapsed=now()-Date.parse(finalConsensus?.updatedAt||'');
-    if(finalConsensus?.direction!==(idea.side==='yes'?'UP':'DOWN')||
-       Number(finalConsensus.agreeingSources)<5||finalConsensus.marketTicker!==ticker||
-       !Number.isFinite(elapsed)||elapsed<0||elapsed>3000){
-      reason='FINAL_CONSENSUS_CHANGED';continue;
-    }
-   }
+   if(!Number.isFinite(ideaAge)||ideaAge<0||ideaAge>20_000){reason='SIGNAL_STALE_OR_INVALID';continue;}
+   if(!isTotal&&idea.lateGameVerified!==true){reason='LATE_GAME_SIGNAL_NOT_VERIFIED';continue;}
    const prefix=ticker.slice(0,ticker.lastIndexOf('-')+1);
    if(account.holdings.some(x=>String(x?.ticker||'').startsWith(prefix)&&
       Number.isFinite(Number(x?.position))&&Number(x.position)!==0)){
@@ -102,7 +84,7 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
    }
    try{book=normalizeKalshiBook(await fetchOrderbook(ticker))}
    catch{book=null}
-   const orderSide=isCrypto&&idea.side==='no'?'no':'yes';
+   const orderSide='yes';
    const resolvedBook=resolveExecutableAskBook(book,fresh,orderSide,now());
    book=resolvedBook.book;
    if(!resolvedBook.source){
@@ -110,10 +92,7 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
    }
    if(!Number.isFinite(Date.parse(fresh.closeTime||''))||
       Date.parse(fresh.closeTime)<=now()+10000){reason='MARKET_CLOSING';continue;}
-   const best=isCrypto&&idea.side==='no'?book.noAsks[0]:book.yesAsks[0];
-   if(isCrypto&&(!/CF Benchmarks/i.test(fresh.rulesPrimary||'')||
-      !/simple average/i.test(fresh.rulesPrimary||'')||
-      !/at least/i.test(fresh.rulesPrimary||''))){reason='SETTLEMENT_RULES_UNVERIFIED';continue;}
+   const best=book.yesAsks[0];
    // The venue supplies series-specific multipliers. Unsupported flat fees,
    // missing metadata, or an unavailable schedule are not proof of profit.
    let feeSchedule=null;
@@ -131,24 +110,13 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
      yesAsk:book.yesAsks?.[0]?.price,noAsk:book.noAsks?.[0]?.price,
      yesDepth:book.yesAsks?.[0]?.quantity,noDepth:book.noAsks?.[0]?.quantity,
      observedAt:fresh.observedAt};
-   const finalScore=isCrypto?cryptoConfidenceScore(idea.probability,
-     Math.min(Number(idea.agreeingSources),Number(finalConsensus?.agreeingSources))):null;
-   if(isCrypto&&!finalScore?.tradeEligible){reason='FINAL_CONSENSUS_CONFIDENCE_BELOW_MINIMUM';continue;}
    const decision=isTotal?assessAlreadyExceededTotal({
        game:idea.game,market:quote,bankroll:Number(account.balance),
        feePerContract:fee,feeMultiplier,holdings:account.holdings,
        holdingsComplete:account.positionsComplete,now:now()
-     }):!isCrypto?planLateGameOrder({game:idea.game,market:quote,
+     }):planLateGameOrder({game:idea.game,market:quote,
        bankroll:Number(account.balance),feePerContract:fee,
-       holdings:account.holdings,now:now()
-     }):assessKalshiValue({market:quote,side:idea.side,
-       probability:idea.probability,
-       probabilitySource:isCrypto?'CRYPTO_SCENARIO_PROXY':'ESPN_LIVE_MODEL',sourceVerified:true,marketMatchVerified:true,
-       bankroll:Number(account.balance),holdings:account.holdings,
-       feePerContract:fee,now:now(),maxLossProbability:.30,
-       minimumEdge:isCrypto?.02:0,
-       maxBankrollFraction:isCrypto?Math.min(Number(idea.allocationFraction),Number(finalConsensus.allocationFraction)):null,
-       consensusConfidenceScorePercent:finalScore?.scorePercent??null});
+       holdings:account.holdings,now:now()});
    if(!decision.allowed){reason=decision.reason;continue;}
    // Final account-level affordability guard: never submit a trade whose
    // all-in debit is unknown or exceeds the currently verified cash balance.
