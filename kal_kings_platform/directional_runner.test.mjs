@@ -231,3 +231,15 @@ test('empty orderbook with stale or depth-free quote remains blocked',async()=>{
   assert.equal(f.orders.length,0);
  }
 });
+
+test('100-cent leader quote with zero displayed ask size is explicitly blocked rather than falsely counted as an order attempt',async()=>{
+ const blockedTicker='KXNBAGAME-26OCT26ATLHOU-HOU';
+ const f=fixture({fetchMarket:async requested=>({id:requested,ticker:requested,status:'active',
+   yesAsk:1,noAsk:.01,yesDepth:0,noDepth:0,
+   closeTime:new Date(now+180000).toISOString(),observedAt:new Date(now).toISOString()}),
+   fetchOrderbook:async()=>({orderbook_fp:{yes_dollars:[],no_dollars:[]}})});
+ const out=await f.runner({ideas:[{...idea,market:{...idea.market,ticker:blockedTicker}}],
+   account:{status:'VERIFIED',balance:15,holdings:[],positionsComplete:true}});
+ assert.equal(f.orders.length,0);
+ assert.equal(out.reason,'ASK_PRICE_INVALID_OR_AT_BOUNDARY_AND_NO_DISPLAYED_ASK_SIZE');
+});
