@@ -13,7 +13,6 @@ async function json(fetcher,url){
  return r.json();
 }
 const candidates={
- BTC:{coinbase:'BTC-USD',kraken:'XBTUSD',bitstamp:'btcusd'},
  ETH:{coinbase:'ETH-USD',kraken:'ETHUSD',bitstamp:'ethusd'},
  SOL:{coinbase:'SOL-USD',kraken:'SOLUSD',bitstamp:'solusd'},
  XRP:{coinbase:'XRP-USD',kraken:'XRPUSD',bitstamp:'xrpusd'},
