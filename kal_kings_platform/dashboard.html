@@ -138,6 +138,9 @@ function renderPredictive(){
  target.innerHTML=rows.length?rows.slice(0,18).map(r=>{
    const signal=r.details||{},crypto=r.strategy==='CRYPTO_DIRECTIONAL_CONSENSUS';
    const direction=r.direction||(crypto?'No consensus':'Watching');
+    const game=signal.gameContext||signal.totalGame||{};
+    const scoreLabel=game.homeScore!=null&&game.awayScore!=null?
+      `${game.away||game.awayTeam||'Away'} ${game.awayScore} – ${game.home||game.homeTeam||'Home'} ${game.homeScore}`:null;
    const ticker=crypto?signal.marketTicker:
       (signal.totalMarket?.ticker||signal.market?.ticker||null);
    const side=crypto?(signal.manualSide|| (direction==='UP'?'yes':direction==='DOWN'?'no':null)):
@@ -146,7 +149,8 @@ function renderPredictive(){
       (signal.totalMarket?.yesAsk||signal.market?.yesAsk);
    const canReview=Boolean(ticker&&side&&Number(price)>0&&Number(price)<1);
    const descriptor=crypto?((signal.agreeingSources||0)+'/7 votes agree · '+(ticker||'No current Kalshi quote')):
-      (r.strategy==='LATE_GAME_LEAD'?'Commanding late-game lead · '+(ticker||'Awaiting contract'):
+      (r.strategy==='LATE_GAME_LEAD'?'Commanding late-game lead'+(scoreLabel?' · '+scoreLabel:'')+' · '+(ticker||'Awaiting contract'):
+       r.strategy==='TOTAL_ALREADY_OVER'?'Verified total threshold exceeded'+(scoreLabel?' · '+scoreLabel:'')+' · '+(ticker||'Awaiting contract'):
        'Live game total · '+(ticker||'Awaiting contract'));
    const card=canReview?`<button class="btn alt" type="button" data-manual-market="${esc(ticker)}" data-manual-side="${esc(side)}" style="margin-top:7px;padding:7px 10px">Review ${side.toUpperCase()} @ ${(Number(price)*100).toFixed(1)}¢</button>`:'';
    return `<div class="ledgerline"><div><strong>${esc(r.asset)}</strong>
