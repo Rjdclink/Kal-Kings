@@ -120,34 +120,14 @@ test('a confirmed zero-fill on one market immediately tries another independentl
  assert.equal(f.orders[1].ticker,second.market.ticker);
 });
 
-test('verified crypto DOWN uses an exchange NO purchase after fresh five-source agreement',async()=>{
- const ticker='KXBTC15M-26OCT261215-15';
- const candidate={...idea,strategy:'CRYPTO_DIRECTIONAL_CONSENSUS',symbol:'BTC',side:'no',
-  market:{ticker},probability:.94,modeledWinProbability:.94,
-  agreeingSources:5,allocationFraction:.2,
-  model:{status:'ESTIMATED',trials:2500,observedAt:new Date(now-10000).toISOString()},
-  updatedAt:new Date(now-10000).toISOString()};
- const f=fixture({fetchMarket:async id=>({id,ticker:id,status:'active',
-   rulesPrimary:"If the simple average of CF Benchmarks BRTI before 12:15 is at least the preceding average, the market resolves to Yes.",
-   closeTime:new Date(now+300000).toISOString(),observedAt:new Date(now).toISOString()}),
-   fetchFinalConsensus:async()=>({direction:'DOWN',agreeingSources:5,allocationFraction:.2,
-      marketTicker:ticker,updatedAt:new Date(now).toISOString()})});
- const r=await f.runner({ideas:[candidate],account:{balance:15,holdings:[],positionsComplete:true,status:'VERIFIED'}});
- assert.equal(r.status,'FILLED');assert.equal(f.orders[0].action,'buy');
- assert.equal(f.orders[0].side,'no');assert.equal(f.orders[0].no_price_dollars,'0.3100');
- assert.equal(f.orders[0].price,undefined);assert.ok(r.contracts>1);
+test('crypto candidates are rejected and can never reach Kalshi order submission',async()=>{
+ const candidate={...idea,strategy:'CRYPTO_DIRECTIONAL_CONSENSUS',symbol:'ETH',
+   market:{ticker:'KXETH15M-26OCT261215-15'},updatedAt:new Date(now).toISOString()};
+ const f=fixture();
+ const r=await f.runner({ideas:[candidate],account:{status:'VERIFIED',balance:15,holdings:[],positionsComplete:true}});
+ assert.equal(f.orders.length,0);
+ assert.equal(r.reason,'UNSUPPORTED_STRATEGY');
 });
-test('changed consensus during final refresh stops crypto execution',async()=>{
- const ticker='KXBTC15M-26OCT261215-15';
- const candidate={...idea,strategy:'CRYPTO_DIRECTIONAL_CONSENSUS',symbol:'BTC',side:'no',
-   market:{ticker},probability:.94,agreeingSources:5,allocationFraction:.2,
-   model:{status:'ESTIMATED',trials:2500,observedAt:new Date(now-20000).toISOString()},
-   updatedAt:new Date(now-20000).toISOString()};
- const f=fixture({fetchFinalConsensus:async()=>({direction:'UP',agreeingSources:7,allocationFraction:.4,marketTicker:ticker,updatedAt:new Date(now).toISOString()})});
- const r=await f.runner({ideas:[candidate],account:{balance:15,holdings:[],positionsComplete:true,status:'VERIFIED'}});
- assert.equal(r.status,'NO_VERIFIED_DIRECTIONAL_EDGE');assert.equal(f.orders.length,0);
-});
-
 test('confirmed zero-fill can be retried on a fresh quote after cooldown, never immediately',async()=>{
  let clock=now,tries=0,save=null;
  const records=new Map();
