@@ -468,7 +468,11 @@ async function collectPredictiveStrategies(){
 async function getPredictiveStrategies(){
  const rows=await sql(`SELECT DISTINCT ON (asset,strategy) asset,strategy,direction,status,
    source_count,market_ticker,details::text AS details,observed_at
-   FROM kal_kings_predictive_signals ORDER BY asset,strategy,observed_at DESC LIMIT 40`);
+   FROM kal_kings_predictive_signals
+    WHERE (strategy='CRYPTO_DIRECTIONAL_CONSENSUS' AND observed_at>now()-interval '90 seconds')
+       OR (strategy IN ('LATE_GAME_LEAD','TOTAL_ALREADY_OVER','OVER_UNDER_CONTEXT')
+           AND observed_at>now()-interval '25 seconds')
+    ORDER BY asset,strategy,observed_at DESC LIMIT 40`);
  return rows.map(r=>({asset:r.asset,strategy:r.strategy,direction:r.direction,
    status:r.status,sourceCount:Number(r.source_count),marketTicker:r.market_ticker,
    updatedAt:r.observed_at,details:typeof r.details==='string'?JSON.parse(r.details):r.details}));
