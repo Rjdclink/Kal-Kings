@@ -34,7 +34,7 @@ export function makeDirectionalLifecycle({
        [trade.ticker,evidence.settled_time]);
      out.confirmedSettlements++;continue;
    }
-   if(trade.status!=='FILLED'){out.pendingReview++;continue;}
+   if(!['FILLED','PARTIALLY_FILLED'].includes(trade.status)){out.pendingReview++;continue;}
    const count=Math.floor(Number(trade.filled_count)),signedHeld=holdings.get(trade.ticker);
    const held=trade.side==='no'?-signedHeld:signedHeld;
    // Exact ticker and confirmed Kalshi exposure are both required.
@@ -58,7 +58,7 @@ export function makeDirectionalLifecycle({
    const peak=Math.max(bid,Number.isFinite(prior)?prior:bid);
    await sql(`UPDATE kal_kings_directional_orders
       SET high_bid=GREATEST(COALESCE(high_bid,0),$2::numeric),updated_at=now()
-      WHERE ticker=$1 AND status='FILLED'`,[trade.ticker,String(peak)]);
+      WHERE ticker=$1 AND status IN ('FILLED','PARTIALLY_FILLED')`,[trade.ticker,String(peak)]);
    try{await recordQuote({...market,yesBid:bid})}catch{/* Journal is optional for protective exits. */}
    let historical=[];
    try{historical=await getBidHistory(trade.ticker)}catch{}
@@ -73,7 +73,7 @@ export function makeDirectionalLifecycle({
    const id=createId();
    const locked=await sql(`UPDATE kal_kings_directional_orders
       SET status='EXIT_SUBMITTING',exit_client_order_id=$2::uuid,updated_at=now()
-      WHERE ticker=$1 AND status='FILLED' RETURNING ticker`,[trade.ticker,id]);
+      WHERE ticker=$1 AND status IN ('FILLED','PARTIALLY_FILLED') RETURNING ticker`,[trade.ticker,id]);
    if(!locked.length)continue;
    out.exitsSubmitted++;
    let status='EXIT_UNCERTAIN',orderId=null,filled=0;
