@@ -9,8 +9,9 @@ const book={orderbook_fp:{yes_dollars:[['0.6300','15.00']],no_dollars:[['0.3600'
 const account={status:'MONITORED',freeCash:10,holdings:[{ticker,position:1}],positionsComplete:true};
 function fixture(overrides={}){
  let submissions=[],updates=[];
+ const trackedRow=overrides.tracked||tracked;
  const sql=async(q,p=[])=>{
-  if(q.includes('SELECT')&&q.includes('kal_kings_directional_orders'))return [tracked];
+  if(q.includes('SELECT')&&q.includes('kal_kings_directional_orders'))return [trackedRow];
   if(q.includes('UPDATE kal_kings_directional_orders')){updates.push(p);return [{ticker}]}
   return [];
  };
@@ -41,3 +42,11 @@ test('uncertain sell receipt remains pending and cannot be retried as confirmed 
 });
 
 test('Kalshi NO contracts have negative signed holdings and remain eligible for protective reduction',async()=>{const no={...tracked,side:'no',entry_price:'.80',high_bid:'.80'};const f=fixture({sql:async(q)=>{if(q.includes('SELECT'))return [no];return [{ticker}]}});const result=await f.run({...account,holdings:[{ticker,position:-1}]});assert.equal(result.exitsSubmitted,1);assert.equal(f.submissions[0].side,'bid');assert.equal(f.submissions[0].reduce_only,true)});
+
+test('partially filled directional entry monitors only the confirmed held quantity',async()=>{
+ const partial={...tracked,status:'PARTIALLY_FILLED',contracts:'3',filled_count:'1'};
+ const f=fixture({tracked:partial});
+ const result=await f.run({...account,holdings:[{ticker,position:1}]});
+ assert.equal(result.exitsSubmitted,1);
+ assert.equal(f.submissions[0].count,1);
+});
