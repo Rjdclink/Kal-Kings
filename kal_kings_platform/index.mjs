@@ -18,10 +18,8 @@ import {cashAvailableForReinvestment} from './kalshi_manager.mjs';
 import {normalizeKalshiBook,monteCarloExitDecision} from './quant.mjs';
 import {assessLiveKalshiEntry,historyForExit,summarizeQuantState} from './quant_runtime.mjs';
 import {selectHistorySamples} from './history_sampler.mjs';
-import {fetchCryptoSignals,fetchSportsSignals} from './predictive_feeds.mjs';
-import {fetchFinalCryptoConsensus} from './crypto_final_consensus.mjs';
+import {fetchSportsSignals} from './predictive_feeds.mjs';
 import {makeDirectionalRunner} from './directional_runner.mjs';
-import {selectCryptoIdea,rankCryptoCandidates} from './crypto_candidate.mjs';
 import {makeManualExecutor} from './manual_execution.mjs';
 import {makeDirectionalLifecycle} from './directional_lifecycle.mjs';
 import {sportsLeadTier} from './sports_allocation.mjs';
@@ -393,96 +391,34 @@ const monitorKalshiPortfolio=makeKalshiLifecycle({fetchAccount:getKalshiAccount,
 const universeScanner=makeUniverseScanner({sql,fetcher:path=>external(KALSHI_PUBLIC+'/trade-api/v2'+path),now:Date.now,limit:500});
 async function collectPredictiveStrategies(){
  const now=Date.now();
- const [cryptoResponse,sportsResponse,universeResponse]=await Promise.allSettled([
-   memo('predictiveCrypto',20000,()=>fetchCryptoSignals({now:Date.now()})),
-   fetchSportsSignals({now}),memo('universe_scan',30000,()=>universeScanner.scan())
- ]);
- const cryptos=cryptoResponse.status==='fulfilled'?cryptoResponse.value:[];
+ const [sportsResponse,universeResponse]=await Promise.allSettled([fetchSportsSignals({now}),memo('universe_scan',30000,()=>universeScanner.scan())]);
  const sports=sportsResponse.status==='fulfilled'?sportsResponse.value:[];
- try{
-  await recordForecasts(sql,sports);
-  await resolveForecasts(sql,async ticker=>(await external(`${KALSHI_PUBLIC}/trade-api/v2/markets/${encodeURIComponent(ticker)}`)).market);
- }catch{/* Incomplete history never invents settled results or authorizes orders. */}
+ try{await recordForecasts(sql,sports);await resolveForecasts(sql,async ticker=>(await external(KALSHI_PUBLIC+'/trade-api/v2/markets/'+encodeURIComponent(ticker))).market)}catch{/* History never authorizes an order. */}
  const rows=[
-   ...cryptos.map(x=>({asset:x.symbol,strategy:'CRYPTO_DIRECTIONAL_CONSENSUS',
-     direction:x.direction==='UNKNOWN'?null:x.direction,status:x.status||'DATA_UNAVAILABLE',
-     source_count:x.sources||0,market_ticker:x.marketTicker||null,details:x})),
-   ...sports.map(x=>({asset:x.event,strategy:'LIVE_SPORTS_SCORE',
-     direction:null,status:x.lateGame?.reason||x.totals?.reason||'LIVE_SCORE_VERIFIED',
-     source_count:1,market_ticker:null,
-     details:{event:x.event,sport:x.sport,score:x.score,period:x.period,
-       clockSeconds:x.clockSeconds,gameContext:x.gameContext,totalGame:x.totalGame,
-       lateGame:x.lateGame,updatedAt:x.updatedAt}})),
-   ...sports.flatMap(x=>[
-     ...(x.exceededTotalsMarkets?.slice(0,4)||[]).map(m=>({asset:x.event,
-        strategy:'TOTAL_ALREADY_OVER',direction:'OVER',status:'SCORE_EXCEEDS_CONTRACT',
-        source_count:1,market_ticker:m.ticker,details:{...x,totalMarket:m}})),
-     ...(x.lateGame?.direction?[{asset:x.event,strategy:'LATE_GAME_LEAD',
-       direction:x.lateGame.direction,status:x.lateGame.reason,
-       source_count:1,market_ticker:x.market?.ticker||null,details:x}]:[]),
-     ...(x.totals?.direction?[{asset:x.event,strategy:'OVER_UNDER_CONTEXT',
-       direction:x.totals.direction,status:x.totals.reason,
-       source_count:1,market_ticker:null,details:x}]:[])
-   ])
+  ...sports.map(x=>({asset:x.event,strategy:'LIVE_SPORTS_SCORE',direction:null,status:x.lateGame?.reason||x.totals?.reason||'LIVE_SCORE_VERIFIED',source_count:1,market_ticker:x.market?.ticker||null,details:{event:x.event,sport:x.sport,score:x.score,period:x.period,clockSeconds:x.clockSeconds,gameContext:x.gameContext,totalGame:x.totalGame,lateGame:x.lateGame,updatedAt:x.updatedAt}})),
+  ...sports.flatMap(x=>[
+   ...(x.exceededTotalsMarkets?.slice(0,4)||[]).map(m=>({asset:x.event,strategy:'TOTAL_ALREADY_OVER',direction:'OVER',status:'SCORE_EXCEEDS_CONTRACT',source_count:1,market_ticker:m.ticker,details:{...x,totalMarket:m}})),
+   ...(x.lateGame?.direction?[{asset:x.event,strategy:'LATE_GAME_LEAD',direction:x.lateGame.direction,status:x.lateGame.reason,source_count:1,market_ticker:x.market?.ticker||null,details:x}]:[]),
+   ...(x.totals?.direction?[{asset:x.event,strategy:'OVER_UNDER_CONTEXT',direction:x.totals.direction,status:x.totals.reason,source_count:1,market_ticker:null,details:x}]:[])
+  ])
  ];
- if(rows.length){
-   await sql(`INSERT INTO kal_kings_predictive_signals
-     (asset,strategy,direction,status,source_count,market_ticker,details,observed_at)
-     SELECT p.asset,p.strategy,p.direction,p.status,p.source_count,p.market_ticker,p.details,now()
-     FROM jsonb_to_recordset($1::jsonb) AS p(asset text,strategy text,direction text,status text,
-       source_count integer,market_ticker text,details jsonb)`,[JSON.stringify(rows)]);
- }
+ if(rows.length)await sql('INSERT INTO kal_kings_predictive_signals(asset,strategy,direction,status,source_count,market_ticker,details,observed_at) SELECT p.asset,p.strategy,p.direction,p.status,p.source_count,p.market_ticker,p.details,now() FROM jsonb_to_recordset($1::jsonb) AS p(asset text,strategy text,direction text,status text,source_count integer,market_ticker text,details jsonb)',[JSON.stringify(rows)]);
  const totalProofDiagnostics={checked:0,eligible:0,rejected:{}};
-  const totalIdeas=sports.flatMap(x=>{
-   const markets=x.exceededTotalsMarkets?.length?x.exceededTotalsMarkets:
-     (x.totalMarket?[x.totalMarket]:[]);
-   if(!x.totalGame)return [];
-   return markets.flatMap(m=>{
-     totalProofDiagnostics.checked++;
-     const proof=verifyExceededTotal({game:x.totalGame,market:m,now});
-     if(!proof.eligible){
-       const reason=String(proof.reason||'UNKNOWN_REJECTION');
-       totalProofDiagnostics.rejected[reason]=(totalProofDiagnostics.rejected[reason]||0)+1;
-       return [];
-     }
-     totalProofDiagnostics.eligible++;
-     const price=Number(m.yesAsk);
-     if(!(price>0&&price<1)||!(Number(m.yesDepth)>=1)){
-       totalProofDiagnostics.rejected.UNEXECUTABLE_DISCOVERY_QUOTE=
-         (totalProofDiagnostics.rejected.UNEXECUTABLE_DISCOVERY_QUOTE||0)+1;
-       return [];
-     }
-     // Discovery deliberately does not assume a single-share fee proves
-     // profitability. The final Kalshi order check tests actual quantity,
-     // official fee multiplier, executable book depth, and free cash.
-     return [{...x,strategy:'TOTAL_ALREADY_OVER',id:'total:'+m.ticker,
-       market:m,game:x.totalGame,sourceVerified:true,
-       marketMatchVerified:true,conditionalOutcomeVerified:true,
-       modeledLossFrequency:null,expectedNetDollars:null,
-       estimatedMaxDebitDollars:null,allowed:false,
-       requiresFeeVerification:true,possibleSettlementMargin:1-price}];
-   });
- }).sort((a,b)=>b.possibleSettlementMargin-a.possibleSettlementMargin||
-    Date.parse(a.market.closeTime)-Date.parse(b.market.closeTime));
- const rankedLate=sports.filter(x=>x.lateGame?.eligibleForAutomation===true&&x.lateGame?.reason==='COMMANDING_LATE_LEAD'&&x.gameContext)
-   .map(x=>{
-     const game=x.gameContext,tier=sportsLeadTier({sport:game.sport,period:game.period,
-       clockSeconds:game.clockSeconds,lead:x.lateGame.lead});
-     const matched=x.marketMatchVerified===true&&!!x.market?.ticker;
-     return {...x,strategy:'LATE_GAME_LEAD',game,
-       sourceVerified:true,lateGameVerified:true,marketMatchVerified:matched,
-       market:matched?x.market:null,maxAllocationFraction:tier.maxAllocationFraction,
-       allowed:tier.eligible};
-   }).filter(x=>x.allowed)
-   .sort((a,b)=>b.maxAllocationFraction-a.maxAllocationFraction||
-     a.game.clockSeconds-b.game.clockSeconds).slice(0,12);
- // Already-exceeded totals get FIRST re-price and fee verification.
- // Their preliminary quotes do not claim a guaranteed profit.
- const cryptoIdeas=rankCryptoCandidates(cryptos,{now,max:6});
- // Reserve independent priority slots for both live sports strategies and
- // crypto: one busy sports event cannot starve the crypto automation queue.
- const ideas=[...totalIdeas.slice(0,8),...rankedLate.slice(0,6),...cryptoIdeas.slice(0,6)];
- return {cryptoSignals:cryptos.length,sportsSignals:sports.length,stored:rows.length,ideas,totalProofDiagnostics,priorityOrder:['TOTAL_ALREADY_OVER','LATE_GAME_LEAD','CRYPTO_DIRECTIONAL_CONSENSUS'],universeScanned:universeResponse.status==='fulfilled'?universeResponse.value.scanned:0};
+ const totalIdeas=sports.flatMap(x=>{
+  const markets=x.exceededTotalsMarkets?.length?x.exceededTotalsMarkets:(x.totalMarket?[x.totalMarket]:[]);
+  if(!x.totalGame)return [];
+  return markets.flatMap(m=>{
+   totalProofDiagnostics.checked++;const proof=verifyExceededTotal({game:x.totalGame,market:m,now});
+   if(!proof.eligible){const reason=String(proof.reason||'UNKNOWN_REJECTION');totalProofDiagnostics.rejected[reason]=(totalProofDiagnostics.rejected[reason]||0)+1;return [];}
+   totalProofDiagnostics.eligible++;const price=Number(m.yesAsk);
+   if(!(price>0&&price<1)||!(Number(m.yesDepth)>=1)){totalProofDiagnostics.rejected.UNEXECUTABLE_DISCOVERY_QUOTE=(totalProofDiagnostics.rejected.UNEXECUTABLE_DISCOVERY_QUOTE||0)+1;return [];}
+   return [{...x,strategy:'TOTAL_ALREADY_OVER',id:'total:'+m.ticker,market:m,game:x.totalGame,sourceVerified:true,marketMatchVerified:true,conditionalOutcomeVerified:true,modeledLossFrequency:null,expectedNetDollars:null,estimatedMaxDebitDollars:null,allowed:false,requiresFeeVerification:true,possibleSettlementMargin:1-price}];
+  });
+ }).sort((a,b)=>b.possibleSettlementMargin-a.possibleSettlementMargin||Date.parse(a.market.closeTime)-Date.parse(b.market.closeTime));
+ const rankedLate=sports.filter(x=>x.lateGame?.eligibleForAutomation===true&&x.lateGame?.reason==='COMMANDING_LATE_LEAD'&&x.gameContext&&x.marketMatchVerified===true&&x.market?.ticker)
+  .map(x=>{const game=x.gameContext,tier=sportsLeadTier({sport:game.sport,period:game.period,clockSeconds:game.clockSeconds,lead:x.lateGame.lead});return {...x,strategy:'LATE_GAME_LEAD',game,sourceVerified:true,lateGameVerified:true,marketMatchVerified:true,maxAllocationFraction:tier.maxAllocationFraction,allowed:tier.eligible};})
+  .filter(x=>x.allowed).sort((a,b)=>b.maxAllocationFraction-a.maxAllocationFraction||a.game.clockSeconds-b.game.clockSeconds).slice(0,12);
+ return {cryptoSignals:0,sportsSignals:sports.length,stored:rows.length,ideas:[...totalIdeas.slice(0,8),...rankedLate.slice(0,6)],totalProofDiagnostics,priorityOrder:['TOTAL_ALREADY_OVER','LATE_GAME_LEAD'],universeScanned:universeResponse.status==='fulfilled'?universeResponse.value.scanned:0};
 }
 async function getPredictiveStrategies(){
  const rows=await sql(`SELECT asset,strategy,direction,status,source_count,market_ticker,
@@ -505,11 +441,7 @@ const monitorDirectionalPositions=makeDirectionalLifecycle({sql,
   fetchSettlements:fetchKalshiSettlements,submit:submitSoloOrder,
   getBidHistory:getQuantHistory,recordQuote:recordQuantQuote,
   createId:randomUUID,now:Date.now});
-const runDirectional=makeDirectionalRunner({sql,fetchMarket:freshKalshiMarket,
-  fetchOrderbook:getKalshiOrderbook,fetchFeeSchedule:getVerifiedKalshiFeeSchedule,
-  fetchFinalConsensus:async(symbol,idea)=>fetchFinalCryptoConsensus({
-    symbol,ticker:idea?.market?.ticker,referencePrice:idea?.referencePrice,now:Date.now()}),
-  submit:submitSoloOrder,createId:randomUUID,now:Date.now});
+const runDirectional=makeDirectionalRunner({sql,fetchMarket:freshKalshiMarket,fetchOrderbook:getKalshiOrderbook,fetchFeeSchedule:getVerifiedKalshiFeeSchedule,submit:submitSoloOrder,createId:randomUUID,now:Date.now});
 /** Read-only reconciliation. Kalshi's V2 writes are read back through
  * the authenticated /portfolio/orders listing. Never retry unknown writes.
  */
@@ -608,57 +540,6 @@ const runSolo=makeSoloRunner({fetchAccount:getKalshiAccount,fetchQuotes:publicKa
 /** Three-second user-session execution checks; Neon scheduled minutes remain
  * the unattended fallback. Database bucket guards prevent duplicate cycles.
  */
-async function runCryptoCycle(source='dashboard'){
- const tick=Math.floor(Date.now()/3000);
- const lock=await sql(`INSERT INTO kal_kings_crypto_cycles(tick_key,source,status)
-   VALUES($1::bigint,$2,'STARTED') ON CONFLICT DO NOTHING RETURNING tick_key`,
-   [String(tick),source]);
- if(!lock.length)return {status:'ALREADY_CHECKED'};
- let status='SCANNER_UNAVAILABLE',scanned=0,candidates=0,ticker=null,lastReason=null,stage='LEASE';
- const leaseId='crypto-'+tick+'-'+source;
- let leased=false;
- try{
-   leased=await acquireTradingLease(leaseId);
-   if(!leased)status='SCANNER_BUSY';
-   else{
-   stage='FETCH_SIGNALS_AND_ACCOUNT';
-   const [signals,account]=await Promise.all([
-     memo('predictiveCrypto',30000,()=>fetchCryptoSignals({now:Date.now()})),
-     getKalshiAccount()
-   ]);
-   scanned=signals.length;
-   stage='MAP_CRYPTO_CANDIDATES';
-   const ideas=signals.map(x=>selectCryptoIdea(x,{now:Date.now()})).filter(Boolean);
-   candidates=ideas.length;
-   stage='CHECK_ACCOUNT_AND_EDGE';
-   if(account?.status!=='VERIFIED'||account.positionsComplete!==true)
-     status='ACCOUNT_UNAVAILABLE';
-   else if(!ideas.length)status='NO_MODELED_POSITIVE_VALUE';
-   else{
-     stage='EXECUTE_PRICE_VERIFIED_ORDER';
-     const result=await runDirectional({ideas,account});
-     status=result.status;ticker=result.ticker||null;lastReason=result.reason||null;
-   }
-   }
- }catch(e){status='CRYPTO_SCAN_UNAVAILABLE';
-   lastReason='STAGE_'+stage+':'+(stage==='MAP_CRYPTO_CANDIDATES'?String(e?.message||'Error').replace(/[^A-Za-z0-9:._ -]/g,'').slice(0,90):String(e?.name||'Error'))}
- finally{if(leased)try{await releaseTradingLease(leaseId)}catch{}}
- await sql(`UPDATE kal_kings_crypto_cycles SET status=$2,research_count=$3::integer,
-   candidate_count=$4::integer,traded_ticker=$5,last_reason=$6,finished_at=now()
-   WHERE tick_key=$1::bigint`,
-   [String(tick),status,String(scanned),String(candidates),ticker,lastReason]);
- return {status,scanned,candidates,ticker};
-}
-async function getCryptoCycleStatus(){
- const rows=await sql(`SELECT source,status,research_count,candidate_count,
-    traded_ticker,last_reason,finished_at
-    FROM kal_kings_crypto_cycles
-    ORDER BY tick_key DESC LIMIT 1`);
- const r=rows?.[0];
- return r?{status:r.status,source:r.source,scanned:Number(r.research_count||0),
-   candidates:Number(r.candidate_count||0),ticker:r.traded_ticker||null,
-   reason:r.last_reason||null,checkedAt:r.finished_at}:{status:'NO_SCANS_RECORDED',scanned:0,candidates:0};
-}
 async function getPositionWatches(){
  const rows=await sql(`SELECT ticker,position_side,status,entry_price::text AS entry_price,
  high_bid::text AS high_bid,exit_fill_count::text AS exit_fill_count,updated_at
@@ -759,10 +640,9 @@ async function state(){
     memo('crypto',TTL.crypto,cryptoSpot),memo('polyaccount',TTL.polyaccount,polyAccountCheck),getTradingViewAlerts(),memo('trends',TTL.trends,cryptoTrends),tradingViewEnabled(),getSoloOrders(),getPositionWatches(),getBotSettlements(),getQuantDiagnostics()
   ]);
   const value=(r,fallback)=>r.status==='fulfilled'?r.value:fallback;
-  const [predictive,strategyPerformance,directionalOrders,marketUniverse,scannerStatus,cryptoCycleStatus,manualOrderHistory]=await Promise.all([
+  const [predictive,strategyPerformance,directionalOrders,marketUniverse,scannerStatus,manualOrderHistory]=await Promise.all([
     getPredictiveStrategies().catch(()=>[]),getStrategyPerformance(sql).catch(()=>({status:'UNAVAILABLE'})),
     getDirectionalOrders(sql).catch(()=>[]),universeScanner.latest().catch(()=>({status:'UNAVAILABLE',scanned:0,research:[]})),getScannerStatus().catch(()=>({status:'UNAVAILABLE'})),
-    getCryptoCycleStatus().catch(()=>({status:'UNAVAILABLE',scanned:0,candidates:0})),
     getManualOrders().catch(()=>[])]);
   const k=value(kr,[]),p=value(pr,[]),d=value(dr,{events:[],issues:['Odds provider unavailable']});
   const account=value(ar,{status:'UNAVAILABLE',balance:null,holdings:[]});
@@ -797,7 +677,7 @@ async function state(){
    holdings:account.holdings,kalshiStatus:account.status,polymarketStatus:value(polyAuth,{status:'UNAVAILABLE'}).status,crypto:enrichedCrypto,
    tradingView:{configured:value(tvReady,false),alertsReceived:alerts.length,alerts,source:'TradingView configured webhooks; spot indicators computed from Coinbase'},
    quantitativeAnalysis:value(quantReport,{confidence:'DATA_UNAVAILABLE',verifiedExpectedProfit:null,recent:[]}),
-   predictiveStrategies:predictive,strategyPerformance,directionalOrders,marketUniverse,scannerStatus,cryptoCycleStatus,manualOrderHistory,
+   predictiveStrategies:predictive,strategyPerformance,directionalOrders,marketUniverse,scannerStatus,manualOrderHistory,
    researchSources:researchCrawlerPool.status(),
    config:{...requiredEnv(),oddsFeedConfigured:true,neonStorageReady:pairsr.status==='fulfilled'},
    quotes:{kalshi:k,polymarket:p,draftkings:d.events},
@@ -845,9 +725,8 @@ export default {
       if(!isNeonSoloTrigger({'x-neon-trigger-invocation-id':request.headers.get('x-neon-trigger-invocation-id')},body))
         return error(403,'Not an authorized Neon schedule trigger');
       try{const sports=await runSolo({invocationId:body.invocation_id,scheduledAt:body.data.scheduled_at});
-          const crypto=await runCryptoCycle('schedule').catch(()=>({status:'UNAVAILABLE'}));
           // A public-page crawler sweep runs occasionally AFTER trade checks.
-          // Timeouts never block the independent sports/crypto engines.
+          // Timeouts never block the two-strategy sports engine.
           if(new Date().getUTCMinutes()%15===0)
              await Promise.race([supplementalSportsResearch().catch(()=>null),
                new Promise(resolve=>setTimeout(resolve,1250))]);
@@ -855,7 +734,7 @@ export default {
             manualOrders.reconcilePending().catch(()=>({status:'UNAVAILABLE'})),
             new Promise(resolve=>setTimeout(()=>resolve({status:'DEFERRED'}),3500))
           ]);
-          return reply({...sports,crypto,reconciliation});}
+          return reply({...sports,reconciliation});}
       catch{return error(503,'Kalshi automation unavailable');}
     }
     if(path==='/webhooks/tradingview'){
@@ -877,11 +756,8 @@ export default {
     try{
       if(request.method==='GET'&&path==='/api/state')return reply(await state());
       if(request.method==='GET'&&path==='/api/kalshi/status'){
-        const [cryptoCycleStatus,scannerStatus,manualOrderHistory]=await Promise.all([
-          getCryptoCycleStatus().catch(()=>({status:'UNAVAILABLE',scanned:0,candidates:0})),
-          getScannerStatus().catch(()=>({status:'UNAVAILABLE'})),
-          getManualOrders().catch(()=>[])]);
-        return reply({cryptoCycleStatus,scannerStatus,manualOrderHistory,asOf:iso()});
+        const [scannerStatus,manualOrderHistory]=await Promise.all([getScannerStatus().catch(()=>({status:'UNAVAILABLE'})),getManualOrders().catch(()=>[])]);
+        return reply({scannerStatus,manualOrderHistory,asOf:iso()});
       }
       if(request.method==='POST'&&path==='/api/research/refresh'){
         try{const report=await supplementalSportsResearch();
@@ -892,8 +768,6 @@ export default {
       if(request.method==='GET'&&path==='/api/tradingview/alerts')return reply({alerts:await getTradingViewAlerts(),configured:await tradingViewEnabled()});
       if(request.method==='POST'&&path==='/api/tradingview/config')return reply(await setTradingViewSecret((await request.json()).passphrase));
                   if(request.method==='GET'&&path==='/api/kalshi/solo')return reply({orders:await getSoloOrders(),watches:await getPositionWatches(),settlements:await getBotSettlements()});
-      if(request.method==='POST'&&path==='/api/kalshi/crypto-cycle')
-        return reply(await runCryptoCycle('dashboard'));
       if(request.method==='GET'&&path==='/api/kalshi/manual/orders')return reply({orders:await getManualOrders()});
       if(request.method==='POST'&&path==='/api/kalshi/reconcile')
         return reply(await manualOrders.reconcilePending());
