@@ -30,7 +30,7 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
       idea.sourceVerified!==true||idea.marketMatchVerified!==true||!validTicker(ticker)||
       (!isTotal&&!isCrypto&&idea.lateGameVerified!==true)||
       !Number.isFinite(age(idea.updatedAt,clock))||age(idea.updatedAt,clock)<0||
-      age(idea.updatedAt,clock)>(isCrypto?30_000:10_000))continue;
+      age(idea.updatedAt,clock)>(isCrypto?30_000:20_000))continue;
    let finalConsensus=null;
    if(isCrypto){
     const modelAge=now()-Date.parse(idea.model?.observedAt||'');
