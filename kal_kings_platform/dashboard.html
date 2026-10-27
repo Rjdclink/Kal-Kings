@@ -253,7 +253,8 @@ function renderDirectional(){
    ' · Sports-total blockers: '+Object.entries(proof.rejected).sort((a,b)=>b[1]-a[1]).slice(0,2).map(([k,v])=>k.replaceAll('_',' ')+' ('+v+')').join(', '):'';
  const priority=Array.isArray(details.priorityOrder)?' · Priority: sports totals → late-game sports → crypto':'';
  $('#scanReason').textContent=reported.replaceAll('_',' ')+' · '+explanation.replaceAll('_',' ')+
-   ' · '+(details.universeScanned||0)+' market quotes checked in latest broad scan'+blocked+priority;
+   ' · candidates: '+(details.ideaCount||0)+' · execution checks: '+(details.executionCandidateChecks||0)+
+   ' · order submissions: '+(details.orderSubmissionAttempts||0)+' · '+(details.universeScanned||0)+' market quotes checked'+blocked+priority;
  const orders=data.directionalOrders||[];
  $('#directionalOrders').innerHTML=orders.length?orders.slice(0,8).map(x=>
    `<div class="ledgerline"><div><strong>${esc(x.ticker)}</strong><div class="tiny">${esc(x.strategy)} · ${esc(x.status)} · ${time(x.updated_at)}</div></div><div class="number">${esc(x.filled)} / ${esc(x.contracts)}<div class="tiny">verified fills</div></div></div>`).join(''):
