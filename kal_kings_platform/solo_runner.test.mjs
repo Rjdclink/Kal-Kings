@@ -151,3 +151,15 @@ test('confirmed profitable directional entry does not wait for unused legacy quo
  assert.equal(result.status,'DIRECTIONAL_FILLED');
  assert.equal(legacyCalls,0);
 });
+
+test('sports radar signals are not mislabeled as no qualifying paired-spread trade',async()=>{
+ const f=fixture({fetchQuotes:async()=>[{...q,noAsk:.7}],
+   scanPredictive:async()=>({ideas:[{id:'late-game'}],sportsSignals:7,cryptoSignals:5}),
+   executeDirectional:async()=>({status:'NO_VERIFIED_DIRECTIONAL_EDGE',
+     reason:'NO_EXECUTABLE_ASK_DEPTH',candidateChecks:2,orderSubmissionAttempts:0,
+     lastCheckedTicker:'KXNBAGAME-26OCT26ATLHOU-HOU',lastCheckedStrategy:'LATE_GAME_LEAD'})});
+ const result=await f.run(runInput);
+ assert.equal(result.status,'SPORTS_SIGNALS_FOUND_NO_EXECUTABLE_ORDER');
+ assert.equal(result.reason,'NO_EXECUTABLE_ASK_DEPTH');
+ assert.equal(f.calls.length,0);
+});
