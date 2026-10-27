@@ -22,7 +22,13 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
     WHERE status IN ('SUBMITTING','UNCERTAIN','PARTIALLY_FILLED','EXIT_SUBMITTING','EXIT_UNCERTAIN') LIMIT 1`);
   if(pending.length)return {status:'HALTED_PENDING_RECONCILIATION'};
   let reason='NO_CURRENT_INDEPENDENT_EDGE',alreadyAttempted=false,attempts=0;
-  for(const idea of Array.isArray(ideas)?ideas:[]){
+  // Sports are the primary execution queue: already-exceeded totals first,
+  // then verified late-game leads, and crypto only after sports candidates.
+  const priority={TOTAL_ALREADY_OVER:0,LATE_GAME_LEAD:1,CRYPTO_DIRECTIONAL_CONSENSUS:2};
+  const orderedIdeas=(Array.isArray(ideas)?ideas:[]).slice().sort((a,b)=>
+    (priority[a?.strategy]??99)-(priority[b?.strategy]??99)||
+    (Number(b?.maxAllocationFraction)||0)-(Number(a?.maxAllocationFraction)||0));
+  for(const idea of orderedIdeas){
    const m=idea?.market,ticker=m?.ticker;
    const isTotal=idea?.strategy==='TOTAL_ALREADY_OVER';
    const isCrypto=idea?.strategy==='CRYPTO_DIRECTIONAL_CONSENSUS';
