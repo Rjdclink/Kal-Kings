@@ -3,7 +3,7 @@
  */
 import {planManualKalshiBuy,buildManualBuyOrder} from './manual_trading.mjs';
 import {estimatedKalshiBuyDebit} from './engine.mjs';
-const tickerOk=t=>typeof t==='string'&&/^[A-Z0-9_-]{4,128}$/.test(t);
+const tickerOk=t=>typeof t==='string'&&/^(?:KXNFLGAME|KXNBAGAME|KXNHLGAME|KXMLBGAME|KXCFBGAME|KXCBBGAME|KXNCAAMBGAME|KXWNBAGAME|KXEPLGAME|KXMLSGAME|KXNFLTOTAL|KXNBATOTAL|KXNHLTOTAL|KXMLBTOTAL|KXCFBTOTAL|KXCBBTOTAL|KXNCAAMBTOTAL|KXWNBATOTAL|KXEPLTOTAL|KXMLSTOTAL)-[A-Z0-9_-]+$/.test(t);
 const uuidOk=id=>typeof id==='string'&&/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(id);
 export function classifyKalshiManualError(err){
  const code=Number(err?.httpStatus||0);
