@@ -426,9 +426,8 @@ async function getPredictiveStrategies(){
      SELECT DISTINCT ON (asset,strategy) asset,strategy,direction,status,source_count,
        market_ticker,details,observed_at
      FROM kal_kings_predictive_signals
-     WHERE asset <> 'BTC' AND ((strategy='CRYPTO_DIRECTIONAL_CONSENSUS' AND observed_at>now()-interval '120 seconds')
-       OR (strategy IN ('LIVE_SPORTS_SCORE','LATE_GAME_LEAD','TOTAL_ALREADY_OVER','OVER_UNDER_CONTEXT')
-           AND observed_at>now()-interval '120 seconds'))
+     WHERE strategy IN ('LIVE_SPORTS_SCORE','LATE_GAME_LEAD','TOTAL_ALREADY_OVER','OVER_UNDER_CONTEXT')
+       AND observed_at>now()-interval '120 seconds'
      ORDER BY asset,strategy,observed_at DESC
    ) latest ORDER BY observed_at DESC LIMIT 100`);
  return rows.map(r=>({asset:r.asset,strategy:r.strategy,direction:r.direction,
@@ -491,14 +490,15 @@ async function getManualOrders(){
    reason:r.last_error||null,createdAt:r.created_at,updatedAt:r.updated_at}));
 }
 async function recordScannerStatus(result){
- const details={cryptoSignals:result.cryptoSignals||0,sportsSignals:result.sportsSignals||0,
+ const details={sportsSignals:result.sportsSignals||0,
    universeScanned:result.universeScanned||0,ideaCount:result.ideaCount||0,
-   directionalReason:result.directionalReason||null,ticker:result.ticker||null,
+   directionalReason:result.directionalReason||null,sportsExecutionStatus:result.sportsExecutionStatus||null,
+   sportsExecutionReason:result.sportsExecutionReason||null,stage:result.stage||null,ticker:result.ticker||null,
    executionCandidateChecks:Number(result.executionCandidateChecks)||0,
    orderSubmissionAttempts:Number(result.orderSubmissionAttempts)||0,
    lastCheckedTicker:result.lastCheckedTicker||null,lastCheckedStrategy:result.lastCheckedStrategy||null,
    totalProofDiagnostics:result.totalProofDiagnostics||null,
-   priorityOrder:result.priorityOrder||['TOTAL_ALREADY_OVER','LATE_GAME_LEAD','CRYPTO_DIRECTIONAL_CONSENSUS']};
+   priorityOrder:result.priorityOrder||['TOTAL_ALREADY_OVER','LATE_GAME_LEAD']};
  await sql(`INSERT INTO kal_kings_scanner_status
    (id,last_status,last_reason,details,updated_at)
    VALUES('main',$1,$2,$3::jsonb,now())
