@@ -198,3 +198,36 @@ test('Kalshi explicitly rejecting an automatic sports/crypto order is not misrep
  assert.equal(result.status,'REJECTED');
  assert.equal(result.reason,'KALSHI_ORDER_PERMISSION_DENIED');
 });
+
+test('fresh exchange top-of-book fallback turns an empty orderbook into a bounded sports execution attempt',async()=>{
+ const fallbackTicker='KXNHLGAME-26OCT27LAKNYR-NYR';
+ const fallbackIdea={...idea,market:{...idea.market,ticker:fallbackTicker},
+   eventKey:'NHL:2026-10-27:LAK:NYR',updatedAt:new Date(now).toISOString(),
+   game:{sport:'NHL',period:3,clockSeconds:240,homeScore:1,awayScore:4}};
+ const f=fixture({fetchMarket:async requested=>({id:requested,ticker:requested,status:'active',
+   yesAsk:.76,noAsk:.25,yesDepth:8,noDepth:5,
+   closeTime:new Date(now+180000).toISOString(),observedAt:new Date(now).toISOString(),
+   floorStrike:null,rulesPrimary:'Official NHL winner market'}),
+   fetchOrderbook:async()=>({orderbook_fp:{yes_dollars:[],no_dollars:[]}})});
+ const out=await f.runner({ideas:[fallbackIdea],
+   account:{status:'VERIFIED',balance:15,holdings:[],positionsComplete:true}});
+ assert.equal(f.orders.length,1);
+ assert.equal(f.orders[0].ticker,fallbackTicker);
+ assert.equal(out.status,'FILLED');
+});
+test('empty orderbook with stale or depth-free quote remains blocked',async()=>{
+ const fallbackTicker='KXNHLGAME-26OCT27LAKNYR-NYR';
+ const candidate={...idea,market:{...idea.market,ticker:fallbackTicker},
+   eventKey:'NHL:2026-10-27:LAK:NYR',updatedAt:new Date(now).toISOString(),
+   game:{sport:'NHL',period:3,clockSeconds:240,homeScore:1,awayScore:4}};
+ for(const bad of [
+   {yesAsk:.76,yesDepth:8,observedAt:new Date(now-5000).toISOString()},
+   {yesAsk:.76,yesDepth:0,observedAt:new Date(now).toISOString()}
+ ]){
+  const f=fixture({fetchMarket:async requested=>({id:requested,ticker:requested,status:'active',
+    ...bad,closeTime:new Date(now+180000).toISOString()}),
+    fetchOrderbook:async()=>({orderbook_fp:{yes_dollars:[],no_dollars:[]}})});
+  await f.runner({ideas:[candidate],account:{status:'VERIFIED',balance:15,holdings:[],positionsComplete:true}});
+  assert.equal(f.orders.length,0);
+ }
+});
