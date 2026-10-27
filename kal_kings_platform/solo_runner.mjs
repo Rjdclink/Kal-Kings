@@ -87,23 +87,50 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
         }catch{/* Unfunded account must not turn provider outages into orders. */}
         return finish({status:'UNFUNDED'});
       }
-      if(Array.isArray(predictive?.ideas)&&predictive.ideas.length){
-        stage='DIRECTIONAL';
-        const dir=await executeDirectional({ideas:predictive.ideas,
-          account:{status:'VERIFIED',balance,holdings:account?.holdings,
-            positionsComplete:account?.positionsComplete}});
-        scanMeta.directionalReason=dir?.reason||dir?.status||'NOT_APPROVED';
-        scanMeta.executionCandidateChecks=Number(dir?.candidateChecks)||0;
-        scanMeta.orderSubmissionAttempts=Number(dir?.orderSubmissionAttempts)||0;
-        scanMeta.lastCheckedTicker=dir?.lastCheckedTicker||null;
-        scanMeta.lastCheckedStrategy=dir?.lastCheckedStrategy||null;
-        if(['FILLED','PARTIALLY_FILLED','UNCERTAIN'].includes(dir?.status))
-          return finish({status:'DIRECTIONAL_'+dir.status,ticker:dir.ticker});
-        if(dir?.status==='REJECTED')return finish({status:'DIRECTIONAL_REJECTED',reason:dir.reason,ticker:dir.ticker});
-        if(dir?.status==='HALTED_PENDING_RECONCILIATION')
+      const ideas=Array.isArray(predictive?.ideas)?predictive.ideas:[];
+      // Sports execution gets its own first pass. Crypto cannot consume the
+      // cycle before the sports candidates have reached the live order checks.
+      const sportsIdeas=ideas.filter(x=>['TOTAL_ALREADY_OVER','LATE_GAME_LEAD'].includes(x?.strategy));
+      const cryptoIdeas=ideas.filter(x=>x?.strategy==='CRYPTO_DIRECTIONAL_CONSENSUS'&&
+        String(x?.symbol||'').toUpperCase()!=='BTC'&&String(x?.asset||'').toUpperCase()!=='BTC');
+      const executeQueue=async(queue,queueStage)=>{
+        if(!queue.length)return null;
+        stage=queueStage;
+        return executeDirectional({ideas:queue,account:{status:'VERIFIED',balance,
+          holdings:account?.holdings,positionsComplete:account?.positionsComplete}});
+      };
+      if(sportsIdeas.length){
+        const sport=await executeQueue(sportsIdeas,'SPORTS_EXECUTION');
+        scanMeta.directionalReason=sport?.reason||sport?.status||'SPORTS_NOT_APPROVED';
+        scanMeta.executionCandidateChecks+=Number(sport?.candidateChecks)||0;
+        scanMeta.orderSubmissionAttempts+=Number(sport?.orderSubmissionAttempts)||0;
+        scanMeta.lastCheckedTicker=sport?.lastCheckedTicker||scanMeta.lastCheckedTicker;
+        scanMeta.lastCheckedStrategy=sport?.lastCheckedStrategy||scanMeta.lastCheckedStrategy;
+        if(['FILLED','PARTIALLY_FILLED','UNCERTAIN'].includes(sport?.status))
+          return finish({status:'SPORTS_'+sport.status,ticker:sport.ticker});
+        if(sport?.status==='REJECTED')
+          return finish({status:'SPORTS_REJECTED',reason:sport.reason,ticker:sport.ticker});
+        if(sport?.status==='HALTED_PENDING_RECONCILIATION')
+          return finish({status:'HALTED_DIRECTIONAL_RECONCILIATION'});
+        scanMeta.sportsExecutionStatus=sport?.status||'UNAVAILABLE';
+        scanMeta.sportsExecutionReason=sport?.reason||null;
+      }
+      if(cryptoIdeas.length){
+        const crypto=await executeQueue(cryptoIdeas,'CRYPTO_EXECUTION');
+        scanMeta.directionalReason=crypto?.reason||crypto?.status||scanMeta.directionalReason;
+        scanMeta.executionCandidateChecks+=Number(crypto?.candidateChecks)||0;
+        scanMeta.orderSubmissionAttempts+=Number(crypto?.orderSubmissionAttempts)||0;
+        scanMeta.lastCheckedTicker=crypto?.lastCheckedTicker||scanMeta.lastCheckedTicker;
+        scanMeta.lastCheckedStrategy=crypto?.lastCheckedStrategy||scanMeta.lastCheckedStrategy;
+        if(['FILLED','PARTIALLY_FILLED','UNCERTAIN'].includes(crypto?.status))
+          return finish({status:'DIRECTIONAL_'+crypto.status,ticker:crypto.ticker});
+        if(crypto?.status==='REJECTED')
+          return finish({status:'DIRECTIONAL_REJECTED',reason:crypto.reason,ticker:crypto.ticker});
+        if(crypto?.status==='HALTED_PENDING_RECONCILIATION')
           return finish({status:'HALTED_DIRECTIONAL_RECONCILIATION'});
       }
-      if(!scanMeta.ideaCount&&!scanMeta.directionalReason)scanMeta.directionalReason='NO_VERIFIED_DIRECTIONAL_CANDIDATES';
+      if(!sportsIdeas.length&&!cryptoIdeas.length&&!scanMeta.directionalReason)
+        scanMeta.directionalReason='NO_VERIFIED_DIRECTIONAL_CANDIDATES';
       // Preserve bounded real quote histories independently of bank funding.
       // No-fill and no-funds cycles must not count toward profitable trades.
       stage='QUOTE_HISTORY';
