@@ -1,8 +1,6 @@
 /** Kal Kings independent live signal-feed adapters. Read-only; never place orders. */
-import {cryptoConsensus,assessLateGame,assessTotals} from './predictive_strategies.mjs';
-import {technicalIndicators,assessCryptoRegime,matchSportsOutcome,assessTotalsProjection} from './strategy_optimizer.mjs';
-import {additionalSpotCandles} from './spot_venue_adapters.mjs';
-import {runCryptoMonteCarlo} from './crypto_trade_model.mjs';
+import {assessLateGame,assessTotals} from './predictive_strategies.mjs';
+import {matchSportsOutcome,assessTotalsProjection} from './strategy_optimizer.mjs';
 const KALSHI='https://api.elections.kalshi.com/trade-api/v2';
 const ESPN='https://site.api.espn.com/apis/site/v2/sports';
 const integer=n=>Number.isFinite(Number(n))?Number(n):null;
@@ -12,60 +10,6 @@ async function json(fetcher,url){
  if(!r?.ok)throw Error('HTTP_'+Number(r?.status||0));
  return r.json();
 }
-const candidates={
- ETH:{coinbase:'ETH-USD',kraken:'ETHUSD',bitstamp:'ethusd'},
- SOL:{coinbase:'SOL-USD',kraken:'SOLUSD',bitstamp:'solusd'},
- XRP:{coinbase:'XRP-USD',kraken:'XRPUSD',bitstamp:'xrpusd'},
- DOGE:{coinbase:'DOGE-USD',kraken:'DOGEUSD',bitstamp:'dogeusd'},
- ADA:{coinbase:'ADA-USD',kraken:'ADAUSD',bitstamp:'adausd'}
-};
-function momentum(rows,{symbol,source,now}){
- const sorted=(Array.isArray(rows)?rows:[]).map(r=>({time:integer(r.time),lastSampleTime:integer(r.lastSampleTime),
-  open:integer(r.open),close:integer(r.close),high:integer(r.high),low:integer(r.low),volume:integer(r.volume)}))
-  .filter(r=>r.time!==null&&r.open>0&&r.close>0&&r.time<=Math.floor(now/1000)+120)
-  .sort((a,b)=>a.time-b.time);
- const latest=sorted.at(-1),first=sorted.at(-4);
- if(!latest||!first||now-(latest.lastSampleTime??latest.time)*1000>360000||
-   latest.time-first.time<600||latest.time-first.time>1500)return null;
- return {symbol,source,start:first.open,last:latest.close,candles:sorted.slice(-35),
-   indicators:technicalIndicators(sorted),observedAt:new Date(now).toISOString(),
-   oldestCandleAt:new Date(first.time*1000).toISOString(),newestCandleAt:new Date(latest.time*1000).toISOString()};
-}
-export async function spotMomentum(fetcher,symbol,now){
- const pair=candidates[symbol];if(!pair)return [];
- const names=['coinbase','kraken','bitstamp','gemini','okx','kucoin','bitfinex'];
- const providers=names.map(async source=>{
-  let j,rows;
-  if(source==='coinbase'){
-   j=await json(fetcher,`https://api.exchange.coinbase.com/products/${pair.coinbase}/candles?granularity=300`);
-   rows=Array.isArray(j)?j.map(x=>({time:x[0],open:x[3],high:x[2],low:x[1],close:x[4],volume:x[5]})):[];
-  }else if(source==='kraken'){
-   j=await json(fetcher,`https://api.kraken.com/0/public/OHLC?pair=${pair.kraken}&interval=5`);
-   if(j.error?.length)throw Error('Kraken data error');
-   const array=Object.values(j.result||{}).find(Array.isArray)||[];
-   rows=array.map(x=>({time:x[0],open:x[1],high:x[2],low:x[3],close:x[4],volume:x[6]}));
-  }else if(source==='bitstamp'){
-   j=await json(fetcher,`https://www.bitstamp.net/api/v2/ohlc/${pair.bitstamp}/?step=300&limit=75`);
-   rows=(j.data?.ohlc||[]).map(x=>({time:x.timestamp,open:x.open,high:x.high,low:x.low,close:x.close,volume:x.volume}));
-  }else{
-   rows=await additionalSpotCandles(fetcher,symbol,source);
-  }
-  return momentum(rows,{symbol,source,now});
- });
- const settled=await Promise.allSettled(providers);
- const valid=settled.filter(x=>x.status==='fulfilled'&&x.value).map(x=>x.value);
- valid.missingSources=settled.flatMap((x,i)=>{
-  if(x.status==='fulfilled'&&x.value)return [];
-  const message=x.status==='rejected'?String(x.reason?.message||''):'';
-  return [{source:names[i],reason:/^HTTP_\d+$/.test(message)?message:
-   /timeout|abort/i.test(message)?'TIMEOUT':
-   x.status==='fulfilled'?'INVALID_OR_STALE_CANDLES':'PROVIDER_FAILURE'}];
- });
- return valid;
-}
-
-const SPORTS_MARKET_SERIES={NFL:'KXNFLGAME',NBA:'KXNBAGAME',NHL:'KXNHLGAME',MLB:'KXMLBGAME',CFB:'KXCFBGAME',CBB:['KXCBBGAME','KXNCAAMBGAME'],EPL:'KXEPLGAME',MLS:'KXMLSGAME',WNBA:'KXWNBAGAME'};
-const SPORTS_TOTAL_SERIES={NFL:'KXNFLTOTAL',NBA:'KXNBATOTAL',NHL:'KXNHLTOTAL',MLB:'KXMLBTOTAL',CFB:'KXCFBTOTAL',CBB:['KXCBBTOTAL','KXNCAAMBTOTAL'],EPL:'KXEPLTOTAL',MLS:'KXMLSTOTAL',WNBA:'KXWNBATOTAL'};
 function matchesSportsTicker(sport,series,dateCode,away,home,ticker){
  const t=String(ticker||'').toUpperCase(),aways=teamAliases(sport,away),homes=teamAliases(sport,home);
  for(const a of aways)for(const h of homes){
@@ -247,94 +191,6 @@ async function fetchSportsMarkets(fetcher,sport,now,kind='game'){
    for(const market of batch.value)if(market.ticker&&!unique.has(market.ticker))
      unique.set(market.ticker,market);
  return [...unique.values()];
-}
-export function calculateCryptoWindowReference(spot,closeTime){
- const target=Date.parse(closeTime||'')-900000,opens=[],current=[];
- for(const item of spot||[]){
-  const bar=item.candles?.find(c=>Math.abs(Number(c.time)*1000-target)<30000);
-  if(Number(bar?.open)>0&&Number(item.last)>0){
-   opens.push(Number(bar.open));current.push(Number(item.last));
-  }
- }
- if(opens.length<5||Math.max(...opens)/Math.min(...opens)>1.02)return null;
- const median=x=>x.sort((a,b)=>a-b)[Math.floor(x.length/2)];
- return {referencePrice:median(opens),spotPrice:median(current),
-  sourceCount:opens.length,source:'SPOT_OPEN_PROXY_NOT_CF_BENCHMARKS'};
-}
-export async function fetchCryptoSignals({fetcher=fetch,now=Date.now(),symbols=['ETH','SOL','XRP','DOGE','ADA'],runSimulation=true}={}){
- const all=await Promise.all(symbols.filter(x=>candidates[x]).map(async symbol=>{
-   const [s,m]=await Promise.allSettled([
-    spotMomentum(fetcher,symbol,now),
-    // Query MARKET listings directly. Nested /events can temporarily contain
-    // only an expiring contract and cause false "no matched contract" labels.
-    json(fetcher,`${KALSHI}/markets?series_ticker=KX${symbol}15M&status=open&limit=30`)
-   ]);
-   const spot=s.status==='fulfilled'?s.value:[],consensus=cryptoConsensus(spot,{symbol,now,minSources:5});
-   const technical=spot.find(x=>x.source==='coinbase'&&x.indicators?.status==='OK')?.indicators||spot.find(x=>x.indicators?.status==='OK')?.indicators||null;
-   const regime=assessCryptoRegime(consensus,technical);
-   let sourceMarkets=m.status==='fulfilled'&&Array.isArray(m.value.markets)?m.value.markets:[];
-   if(!sourceMarkets.length){
-     try{
-       const events=await json(fetcher,`${KALSHI}/events?series_ticker=KX${symbol}15M&status=open&limit=10&with_nested_markets=true`);
-       sourceMarkets=(events.events||[]).flatMap(e=>e.markets||[]);
-     }catch{/* An unavailable series is not a speculative authorization. */}
-   }
-   const markets=sourceMarkets.map(k=>({
-    ticker:k.ticker,seriesTicker:`KX${symbol}15M`,symbol,status:k.status,
-    rulesPrimary:k.rules_primary||'',closeTime:k.close_time,
-    floorStrike:k.floor_strike==null?null:Number(k.floor_strike),
-    yesAsk:kalshiPrice(k.yes_ask_dollars,k.yes_ask),noAsk:kalshiPrice(k.no_ask_dollars,k.no_ask),
-    yesDepth:kalshiDepth(k.yes_ask_size_fp,k.yes_ask_size),
-    noDepth:kalshiDepth(k.no_ask_size_fp,k.no_ask_size),
-    observedAt:new Date(now).toISOString()
-   }));
-   const available=markets.filter(x=>['open','active'].includes(x.status)&&
-       Date.parse(x.closeTime)-now>20000&&
-       ((Number(x.yesAsk)>0&&Number(x.yesAsk)<1)||
-        (Number(x.noAsk)>0&&Number(x.noAsk)<1)))
-     .sort((a,b)=>Date.parse(a.closeTime)-Date.parse(b.closeTime));
-   const market=available[0]||null;
-   // Kalshi publishes the official CF Benchmarks opening target for an
-   // active 15-minute contract. Prefer it over inferred spot candle opens.
-   const strike=Number(market?.floorStrike);
-   const liveSpots=spot.map(x=>Number(x.last)).filter(x=>Number.isFinite(x)&&x>0)
-      .sort((a,b)=>a-b);
-   const reference=market&&strike>0&&Number.isFinite(strike)&&liveSpots.length>=5?
-     {referencePrice:strike,spotPrice:liveSpots[Math.floor(liveSpots.length/2)],
-       sourceCount:liveSpots.length,source:'KALSHI_OFFICIAL_CF_OPENING_TARGET',
-       exactBenchmarkReference:true}:
-     (market?calculateCryptoWindowReference(spot,market.closeTime):null);
-   const model=runSimulation&&reference&&consensus.allocationFraction>0?
-     runCryptoMonteCarlo({symbol,spotPrice:reference.spotPrice,
-      referencePrice:reference.referencePrice,
-      minutesRemaining:(Date.parse(market.closeTime)-now)/60000,
-      volatilityPct:technical?.realizedVolatilityPct??.35,
-      observedAt:new Date(now).toISOString(),now,trials:5000}):null;
-   // A public quote and a historical direction ARE actionable for a person
-   // to review, but do not by themselves prove a profitable automated order.
-   const signalDirection=consensus.direction;
-   // Historical RSI/MACD are secondary observations. A verified 5-of-7
-   // independent spot consensus remains the primary direction signal.
-   const tradeDirection=signalDirection;
-   const manualSide=market&&(tradeDirection==='UP'?'yes':tradeDirection==='DOWN'?'no':null);
-   return {symbol,direction:tradeDirection,sources:consensus.sources,
-    technical,regime:regime.regime,signalStrength:regime.signalStrength,forecastCalibrated:false,
-    agreeingSources:consensus.agreeingSources,agreement:consensus.agreement,
-    allocationFraction:consensus.allocationFraction,totalSupportedSources:7,
-    model,reference,modeledWinProbability:model?.status==='ESTIMATED'?
-      (tradeDirection==='UP'?model.lowerYesProbability:1-model.upperYesProbability):null,
-    spreadPct:consensus.spreadPct??null,spotPrice:consensus.medianPrice??null,
-    spotFeeds:consensus.observations.map(x=>({source:x.source,returnPct:x.returnPct})),
-    missingSources:spot.missingSources||[],
-    marketTicker:market?.ticker||null,market:market||null,yesAsk:market?.yesAsk??null,noAsk:market?.noAsk??null,
-    closeTime:market?.closeTime||null,
-    manualSide,manualReviewAvailable:Boolean(manualSide),signalIsForecast:false,
-    allowed:false,eligibleForAutomation:false,
-    reason:!market?'NO_MATCHING_ACTIVE_KALSHI_CONTRACT':'INDEPENDENT_PROBABILITY_NOT_ESTABLISHED',
-    status:!market?'NO_OPEN_MATCHING_KALSHI_MARKET':consensus.reason,
-    updatedAt:new Date(Math.abs(Date.now()-now)<120000?Date.now():now).toISOString()};
- }));
- return all;
 }
 export function normalizeScoreboard(data,sport,now=Date.now(),enrichment={}){
  const out=[];
