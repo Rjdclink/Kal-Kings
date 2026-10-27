@@ -1,4 +1,4 @@
-/** Kal Kings — Neon-hosted read-first sports/crypto market command center.
+/** Kal Kings — Neon-hosted two-strategy sports trading command center.
  *  Main branch and research_engine are not modified by this package.
  *  Authenticated routes require KALKINGS_ADMIN_TOKEN; no keys in front end.
  */
@@ -708,7 +708,7 @@ export default {
       'referrer-policy':'no-referrer','x-frame-options':'DENY',
       'content-security-policy':"default-src 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; worker-src blob: 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co; img-src 'self' data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"}});
     if(request.method==='GET'&&path==='/health'){
-      const health={ok:true,service:'Kal Kings',uiServed:true,storageProvider:'Neon',buildTag:'sports-execution-v36',
+      const health={ok:true,service:'Kal Kings',uiServed:true,storageProvider:'Neon',buildTag:'sports-only-v37',
         credentialsAvailable:requiredEnv(),liveExecutionEnabled:true,asOf:iso()};
       if(u.searchParams.get('probe')==='1'){
         try{health.probes=await memo('healthDiagnostics',20000,diagnostics);}
