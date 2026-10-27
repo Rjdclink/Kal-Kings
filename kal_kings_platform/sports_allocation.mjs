@@ -1,9 +1,15 @@
 import {seeded} from './engine.mjs';
 
 const specs=Object.freeze({
- NFL:{period:4,maxClock:600,minLead:14,leadSpan:21,scoreSigma:3.0},
- NBA:{period:4,maxClock:360,minLead:12,leadSpan:22,scoreSigma:2.5},
- NHL:{period:3,maxClock:480,minLead:2,leadSpan:3,scoreSigma:.35}
+ NFL:{periods:[4],maxClock:600,minLead:14,leadSpan:21,scoreSigma:3.0},
+ CFB:{periods:[4],maxClock:600,minLead:14,leadSpan:21,scoreSigma:3.0},
+ NBA:{periods:[4],maxClock:360,minLead:12,leadSpan:22,scoreSigma:2.5},
+ WNBA:{periods:[4],maxClock:300,minLead:10,leadSpan:18,scoreSigma:2.0},
+ CBB:{periods:[2],maxClock:360,minLead:12,leadSpan:22,scoreSigma:2.5},
+ NHL:{periods:[3],maxClock:480,minLead:2,leadSpan:3,scoreSigma:.35},
+ EPL:{periods:[2],maxClock:900,minLead:2,leadSpan:3,scoreSigma:.4},
+ MLS:{periods:[2],maxClock:900,minLead:2,leadSpan:3,scoreSigma:.4},
+ MLB:{periods:[8,9,10,11,12,13,14,15],maxClock:0,minLead:3,leadSpan:4,scoreSigma:1.0}
 });
 const clamp=(x,a=0,b=1)=>Math.min(b,Math.max(a,x));
 const good=n=>Number.isFinite(n)&&n>=0;
@@ -12,7 +18,8 @@ const normal=rng=>Math.sqrt(-2*Math.log(Math.max(1e-9,rng())))*Math.cos(2*Math.P
 /** Score/time are the two sports ENTRY screens; this is a monotone tier policy. */
 export function sportsLeadTier({sport,period,lead,clockSeconds}={}){
  const rule=specs[sport],left=Number(clockSeconds),difference=Number(lead);
- if(!rule||Number(period)!==rule.period||!good(left)||left>rule.maxClock||
+ const periodOk=rule&&(sport==='MLB'?Number(period)>=8:rule.periods.includes(Number(period)));
+ if(!rule||!periodOk||!good(left)||left>rule.maxClock||
     !good(difference)||difference<rule.minLead)return {eligible:false,maxAllocationFraction:0,reason:'LEAD_OR_GAME_TIME_NOT_QUALIFIED'};
  const timeStrength=clamp(1-left/rule.maxClock);
  const leadStrength=clamp((difference-rule.minLead)/rule.leadSpan);
