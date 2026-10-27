@@ -150,7 +150,7 @@ export function selectTotalsMarket(game,markets){
   keys.some(k=>String(q.ticker||'').startsWith(k))&&
   ['active','open'].includes(q.status)&&q.floorStrike!=null&&
   Number.isFinite(Number(q.floorStrike))&&q.yesAsk>0&&q.yesAsk<1&&
-  /collectively score more than/i.test(q.rulesPrimary||''))
+  /(collectively score more than|score more goals than|score more runs than|combined score.*more than)/i.test(q.rulesPrimary||''))
   .map(q=>({q,delta:Math.abs(Number(q.floorStrike)+.5-Number(game.totalLine))}))
   .sort((x,y)=>x.delta-y.delta);
  return matches[0]&&matches[0].delta<=3?matches[0].q:null;
@@ -179,7 +179,7 @@ export function selectExceededTotalsMarkets(game,markets,{now=Date.now(),max=24}
      Number.isFinite(ask)&&ask>0&&ask<1&&
      Number.isFinite(depth)&&depth>=1&&
      Date.parse(x.closeTime||'')>now+10000&&
-     /collectively score more than/i.test(String(x.rulesPrimary||''))&&
+     /(collectively score more than|score more goals than|score more runs than|combined score.*more than)/i.test(String(x.rulesPrimary||''))&&
      String(x.rulesPrimary||'').includes(String(strike))&&
      /resolves? to Yes/i.test(String(x.rulesPrimary||''));
  }).sort((a,b)=>
@@ -192,19 +192,26 @@ async function fetchSportsMarkets(fetcher,sport,now,kind='game'){
  const seriesList=(Array.isArray(configured)?configured:[configured]).filter(Boolean);
  if(!seriesList.length)return [];
  const batches=await Promise.allSettled(seriesList.map(async series=>{
-   const j=await json(fetcher,KALSHI+'/events?series_ticker='+encodeURIComponent(series)+'&status=open&limit=200&with_nested_markets=true');
-   return (j.events||[]).flatMap(e=>(e.markets||[]).map(m=>({
-     ticker:m.ticker,status:m.status,eventTicker:e.event_ticker,
-     yesAsk:safe(m.yes_ask_dollars),noAsk:safe(m.no_ask_dollars),
-     yesBid:safe(m.yes_bid_dollars),noBid:safe(m.no_bid_dollars),
-     yesDepth:safe(m.yes_ask_size_fp),noDepth:safe(m.no_ask_size_fp),
-     rulesPrimary:m.rules_primary||'',floorStrike:safe(m.floor_strike),closeTime:m.close_time,
-     observedAt:new Date(now).toISOString(),eventTitle:e.title||'',marketTitle:m.title||'',
-     source:'Kalshi'})));
+   const all=[];let cursor=null;
+   for(let page=0;page<5;page++){
+     let url=KALSHI+'/events?series_ticker='+encodeURIComponent(series)+'&status=open&limit=200&with_nested_markets=true';
+     if(cursor)url+='&cursor='+encodeURIComponent(cursor);
+     const j=await json(fetcher,url);
+     all.push(...(j.events||[]).flatMap(e=>(e.markets||[]).map(m=>({
+       ticker:m.ticker,status:m.status,eventTicker:e.event_ticker,
+       yesAsk:safe(m.yes_ask_dollars),noAsk:safe(m.no_ask_dollars),
+       yesBid:safe(m.yes_bid_dollars),noBid:safe(m.no_bid_dollars),
+       yesDepth:safe(m.yes_ask_size_fp),noDepth:safe(m.no_ask_size_fp),
+       rulesPrimary:m.rules_primary||'',floorStrike:safe(m.floor_strike),closeTime:m.close_time,
+       observedAt:new Date(now).toISOString(),eventTitle:e.title||'',marketTitle:m.title||'',
+       source:'Kalshi'}))));
+     cursor=j.cursor||null;
+     if(!cursor)break;
+   }
+   return all;
  }));
  return batches.flatMap(x=>x.status==='fulfilled'?x.value:[]);
 }
-
 export function calculateCryptoWindowReference(spot,closeTime){
  const target=Date.parse(closeTime||'')-900000,opens=[],current=[];
  for(const item of spot||[]){
