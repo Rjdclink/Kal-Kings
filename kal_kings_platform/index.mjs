@@ -348,8 +348,9 @@ async function runOneTimeLiveTest(body){
    VALUES($1,$2::uuid,$3,$4::numeric,$5::numeric,'SUBMITTING') ON CONFLICT (test_id) DO NOTHING RETURNING test_id`,
    [testId,clientId,ticker,String(decision.price),String(decision.totalMaxDollars)]);
  if(!reserved.length)return {status:'ALREADY_ATTEMPTED'};
- const order={ticker,client_order_id:clientId,side:'bid',count:'1.00',price:decision.price.toFixed(4),
-   time_in_force:'fill_or_kill',self_trade_prevention_type:'taker_at_cross',cancel_order_on_pause:true};
+ const order={ticker,client_order_id:clientId,action:'buy',side:'yes',count:1,type:'limit',
+   yes_price_dollars:decision.price.toFixed(4),time_in_force:'fill_or_kill',
+   self_trade_prevention_type:'taker_at_cross',cancel_order_on_pause:true};
  let status='UNCERTAIN',orderId=null,confirmed=0;
  try{
    const posted=await submitSoloOrder(order);
