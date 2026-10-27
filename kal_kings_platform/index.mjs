@@ -734,7 +734,7 @@ async function diagnostics(){
  const bal=auth.status==='fulfilled' ? auth.value : null;
  const readable=bal&&((Number.isSafeInteger(bal.balance)&&bal.balance>=0)||(Number.isFinite(Number(bal.balance_dollars))&&Number(bal.balance_dollars)>=0));
  const authMessage=auth.status==='rejected'?String(auth.reason?.message||''):'';
- const authHttp=/Provider HTTP (\\d{3})/.exec(authMessage);
+ const authHttp=/Provider HTTP (\d{3})/.exec(authMessage);
  const authDetail=readable?'NONE':!requiredEnv().kalshiConfigured?'NOT_CONFIGURED':
   authHttp?('HTTP_'+authHttp[1]):
   /private key|decoder|key must be/i.test(authMessage)?'PRIVATE_KEY_PARSE_ERROR':
@@ -828,7 +828,7 @@ export default {
       'referrer-policy':'no-referrer','x-frame-options':'DENY',
       'content-security-policy':"default-src 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; worker-src blob: 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.hf.co; img-src 'self' data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"}});
     if(request.method==='GET'&&path==='/health'){
-      const health={ok:true,service:'Kal Kings',uiServed:true,storageProvider:'Neon',buildTag:'sports-execution-v35',
+      const health={ok:true,service:'Kal Kings',uiServed:true,storageProvider:'Neon',buildTag:'sports-execution-v36',
         credentialsAvailable:requiredEnv(),liveExecutionEnabled:true,asOf:iso()};
       if(u.searchParams.get('probe')==='1'){
         try{health.probes=await memo('healthDiagnostics',20000,diagnostics);}
