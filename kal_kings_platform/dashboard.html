@@ -247,7 +247,7 @@ function renderUniverse(){
 function renderDirectional(){
  const status=data.scannerStatus||{},details=status.details||{};
  const reported=status.status||'NO_SCANNER_RESULT';
- const explanation=status.reason||details.directionalReason||'No independently verified net-positive price found yet';
+ const explanation=details.directionalReason||status.reason||'No independently verified net-positive price found yet';
  const proof=details.totalProofDiagnostics||null;
  const blocked=proof&&Object.keys(proof.rejected||{}).length?
    ' · Sports-total blockers: '+Object.entries(proof.rejected).sort((a,b)=>b[1]-a[1]).slice(0,2).map(([k,v])=>k.replaceAll('_',' ')+' ('+v+')').join(', '):'';
