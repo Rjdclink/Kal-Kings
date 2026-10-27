@@ -65,9 +65,20 @@ export async function spotMomentum(fetcher,symbol,now){
  return valid;
 }
 
-const SPORTS_MARKET_SERIES={NFL:'KXNFLGAME',NBA:'KXNBAGAME',NHL:'KXNHLGAME'};
-const SPORTS_TOTAL_SERIES={NFL:'KXNFLTOTAL',NBA:'KXNBATOTAL',NHL:'KXNHLTOTAL'};
+const SPORTS_MARKET_SERIES={NFL:'KXNFLGAME',NBA:'KXNBAGAME',NHL:'KXNHLGAME',MLB:'KXMLBGAME',CFB:'KXCFBGAME',CBB:['KXCBBGAME','KXNCAAMBGAME'],EPL:'KXEPLGAME',MLS:'KXMLSGAME',WNBA:'KXWNBAGAME'};
+const SPORTS_TOTAL_SERIES={NFL:'KXNFLTOTAL',NBA:'KXNBATOTAL',NHL:'KXNHLTOTAL',MLB:'KXMLBTOTAL',CFB:'KXCFBTOTAL',CBB:['KXCBBTOTAL','KXNCAAMBTOTAL'],EPL:'KXEPLTOTAL',MLS:'KXMLSTOTAL',WNBA:'KXWNBATOTAL'};
 const safe=val=>{const n=Number(val);return Number.isFinite(n)?n:null;};
+function parseClockSeconds(value,sport,period){
+ if(typeof value==='number'&&Number.isFinite(value))return value;
+ const raw=String(value??'').trim();
+ const match=raw.match(/^(\d+):(\d{2})(?:\.\d+)?$/);
+ if(match){
+   const seconds=Number(match[1])*60+Number(match[2]);
+   return ['EPL','MLS'].includes(sport)&&Number(period)===2?Math.max(0,5400-seconds):seconds;
+ }
+ const n=Number(raw);
+ return Number.isFinite(n)?n:NaN;
+}
 function easternDate(when){
  const d=new Date(when);
  if(!Number.isFinite(d.valueOf()))return null;
@@ -177,9 +188,11 @@ export function selectExceededTotalsMarkets(game,markets,{now=Date.now(),max=24}
 }
 
 async function fetchSportsMarkets(fetcher,sport,now,kind='game'){
- const series=(kind==='total'?SPORTS_TOTAL_SERIES:SPORTS_MARKET_SERIES)[sport];if(!series)return [];
- try{
-   const j=await json(fetcher,`${KALSHI}/events?series_ticker=${series}&status=open&limit=200&with_nested_markets=true`);
+ const configured=(kind==='total'?SPORTS_TOTAL_SERIES:SPORTS_MARKET_SERIES)[sport];
+ const seriesList=(Array.isArray(configured)?configured:[configured]).filter(Boolean);
+ if(!seriesList.length)return [];
+ const batches=await Promise.allSettled(seriesList.map(async series=>{
+   const j=await json(fetcher,KALSHI+'/events?series_ticker='+encodeURIComponent(series)+'&status=open&limit=200&with_nested_markets=true');
    return (j.events||[]).flatMap(e=>(e.markets||[]).map(m=>({
      ticker:m.ticker,status:m.status,eventTicker:e.event_ticker,
      yesAsk:safe(m.yes_ask_dollars),noAsk:safe(m.no_ask_dollars),
@@ -188,7 +201,8 @@ async function fetchSportsMarkets(fetcher,sport,now,kind='game'){
      rulesPrimary:m.rules_primary||'',floorStrike:safe(m.floor_strike),closeTime:m.close_time,
      observedAt:new Date(now).toISOString(),eventTitle:e.title||'',marketTitle:m.title||'',
      source:'Kalshi'})));
- }catch{return []}
+ }));
+ return batches.flatMap(x=>x.status==='fulfilled'?x.value:[]);
 }
 
 export function calculateCryptoWindowReference(spot,closeTime){
@@ -285,7 +299,10 @@ export function normalizeScoreboard(data,sport,now=Date.now(),enrichment={}){
    const contest=event.competitions?.[0],home=contest?.competitors?.find(x=>x.homeAway==='home'),
      away=contest?.competitors?.find(x=>x.homeAway==='away');
    if(!home||!away)continue;
-   const clock=Number(event.status?.clock??contest?.status?.clock),period=Number(event.status?.period??contest?.status?.period);
+   const period=Number(event.status?.period??contest?.status?.period);
+   const clockRaw=event.status?.clock??contest?.status?.clock;
+   const clockParsed=parseClockSeconds(clockRaw,sport,period);
+   const clock=sport==='MLB'&&!Number.isFinite(clockParsed)?0:clockParsed;
    const state=String(event.status?.type?.state||contest?.status?.type?.state||'pre');
    const city=contest?.venue?.address?.city||null;
    const weather=enrichment.weatherByCity?.[city]||{indoor:contest?.venue?.indoor===true};
@@ -318,8 +335,8 @@ async function openMeteoWind(fetcher,city,indoor){
     precipitationMm:integer(wx.current?.precipitation),source:'Open-Meteo'};
  }catch{return {indoor:false};}
 }
-export async function fetchSportsSignals({fetcher=fetch,now=Date.now(),sports=['NFL','NBA','NHL']}={}){
- const route={NFL:'football/nfl',NBA:'basketball/nba',NHL:'hockey/nhl'};
+export async function fetchSportsSignals({fetcher=fetch,now=Date.now(),sports=['NFL','NBA','NHL','MLB','CFB','CBB','EPL','MLS','WNBA']}={}){
+ const route={NFL:'football/nfl',NBA:'basketball/nba',NHL:'hockey/nhl',MLB:'baseball/mlb',CFB:'football/college-football',CBB:'basketball/mens-college-basketball',EPL:'soccer/eng.1',MLS:'soccer/usa.1',WNBA:'basketball/wnba'};
  const outputs=await Promise.all(sports.filter(x=>route[x]).map(async sport=>{
   try{
    const j=await json(fetcher,`${ESPN}/${route[sport]}/scoreboard`);
