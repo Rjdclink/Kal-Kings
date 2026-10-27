@@ -105,7 +105,11 @@ function renderFeeds(){
   return;
  }
  const rows=data.topSports?.kalshi||[];
- const signals=(data.predictiveStrategies||[]).filter(r=>['LIVE_SPORTS_SCORE','TOTAL_ALREADY_OVER','LATE_GAME_LEAD'].includes(r.strategy));
+ const signals=(data.predictiveStrategies||[]).filter(r=>['LIVE_SPORTS_SCORE','TOTAL_ALREADY_OVER','LATE_GAME_LEAD'].includes(r.strategy))
+    .sort((a,b)=>{
+      const rank=r=>r.strategy==='TOTAL_ALREADY_OVER'?0:r.strategy==='LATE_GAME_LEAD'?1:2;
+      return rank(a)-rank(b)||Date.parse(b.updatedAt||0)-Date.parse(a.updatedAt||0);
+    });
  const quotes=rows.slice(0,10).map(x=>`<div class="quote"><div class="line1"><span>${esc(x.event||x.label)}</span><span class="pr">${x.yesAsk==null?'—':(x.yesAsk*100).toFixed(1)+'¢ YES'}</span></div><div class="line2"><span>${esc(x.id||x.label||'Kalshi')}</span><span>${time(x.updatedAt||x.observedAt)}</span></div></div>`).join('');
  const liveSignals=signals.slice(0,8).map(x=>{
   const d=x.details||{},g=d.gameContext||d.totalGame||d.game||{};
@@ -133,7 +137,13 @@ function renderCrawlerSources(){
  $('#crawlerSources').innerHTML=rows.length?rows.map(x=>`<div class="status-line"><span>${esc(x.name)}</span><span class="${x.configured?'success':'muted'}">${x.configured?(x.successes+' successful'):'Requires setup'}</span></div>`).join(''):'<div class="tiny">Research adapters are not ready.</div>';
 }
 function renderPredictive(){
- const rows=(data.predictiveStrategies||[]).filter(r=>!(r.strategy==='CRYPTO_DIRECTIONAL_CONSENSUS'&&String(r.asset||'').toUpperCase()==='BTC'));
+ const rows=(data.predictiveStrategies||[]).filter(r=>
+   !(r.strategy==='CRYPTO_DIRECTIONAL_CONSENSUS'&&String(r.details?.symbol||r.asset||'').toUpperCase()==='BTC'))
+   .sort((a,b)=>{
+     const rank=r=>r.strategy==='TOTAL_ALREADY_OVER'?0:r.strategy==='LATE_GAME_LEAD'?1:
+       r.strategy==='LIVE_SPORTS_SCORE'?2:r.strategy==='CRYPTO_DIRECTIONAL_CONSENSUS'?3:4;
+     return rank(a)-rank(b)||Date.parse(b.updatedAt||0)-Date.parse(a.updatedAt||0);
+   });
  const target=$('#predictiveCards');
  target.innerHTML=rows.length?rows.slice(0,18).map(r=>{
    const signal=r.details||{},crypto=r.strategy==='CRYPTO_DIRECTIONAL_CONSENSUS';
