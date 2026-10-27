@@ -11,6 +11,32 @@ import {planLateGameOrder} from './sports_allocation.mjs';
 import {cryptoConfidenceScore} from './crypto_candidate.mjs';
 const validTicker=t=>/^[A-Z0-9_-]{4,128}$/.test(t||'');
 const age=(v,now)=>now-Date.parse(v||'');
+/**
+ * Keep the official order book as primary. If its side is empty, use the
+ * same fresh market endpoint's displayed ask and ask-size only when valid.
+ * This allows a bounded FOK attempt without inventing executable liquidity.
+ */
+export function resolveExecutableAskBook(book,market,side,now=Date.now()){
+ const empty={yesBids:[],noBids:[],yesAsks:[],noAsks:[]};
+ const normalized=book&&typeof book==='object'?{
+   yesBids:Array.isArray(book.yesBids)?book.yesBids:[],
+   noBids:Array.isArray(book.noBids)?book.noBids:[],
+   yesAsks:Array.isArray(book.yesAsks)?book.yesAsks:[],
+   noAsks:Array.isArray(book.noAsks)?book.noAsks:[]
+ }:empty;
+ if(!['yes','no'].includes(side))return {book:normalized,source:null};
+ const field=side==='yes'?'yesAsks':'noAsks';
+ if(normalized[field].length)return {book:normalized,source:'ORDERBOOK'};
+ const observed=Date.parse(market?.observedAt||'');
+ const price=Number(side==='yes'?market?.yesAsk:market?.noAsk);
+ const quantity=Number(side==='yes'?market?.yesDepth:market?.noDepth);
+ const ageMs=now-observed;
+ if(!['active','open'].includes(market?.status)||!Number.isFinite(ageMs)||
+    ageMs<0||ageMs>3000||!Number.isFinite(price)||price<=0||price>=1||
+    !Number.isFinite(quantity)||quantity<1)return {book:normalized,source:null};
+ return {book:{...normalized,[field]:[{price:Math.round(price*10000)/10000,quantity}]},
+   source:'MARKET_TOP_OF_BOOK'};
+}
 export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSchedule,
  fetchFinalConsensus,submit,createId,now=Date.now}){
  return async function run({ideas=[],account}={}){
@@ -58,15 +84,18 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
       Number.isFinite(Number(x?.position))&&Number(x.position)!==0)){
      reason='CORRELATED_EXISTING_HOLDINGS';continue;
    }
-   let fresh,book;
-   try{
-     [fresh,book]=await Promise.all([fetchMarket(ticker),fetchOrderbook(ticker)]);
-     book=normalizeKalshiBook(book);
-   }catch{reason='ORDERBOOK_OR_REQUOTE_UNAVAILABLE';continue;}
+   let fresh,book=null;
+   try{fresh=await fetchMarket(ticker)}
+   catch{reason='FRESH_MARKET_UNAVAILABLE_OR_INACTIVE';continue;}
    if(!fresh){reason='FRESH_MARKET_UNAVAILABLE_OR_INACTIVE';continue;}
    if(fresh.id!==ticker){reason='FRESH_MARKET_TICKER_MISMATCH';continue;}
    if(!['open','active'].includes(fresh.status)){reason='FRESH_MARKET_NOT_OPEN';continue;}
-   if(!(isCrypto&&idea.side==='no'?book.noAsks?.length:book.yesAsks?.length)){
+   try{book=normalizeKalshiBook(await fetchOrderbook(ticker))}
+   catch{book=null}
+   const orderSide=isCrypto&&idea.side==='no'?'no':'yes';
+   const resolvedBook=resolveExecutableAskBook(book,fresh,orderSide,now());
+   book=resolvedBook.book;
+   if(!resolvedBook.source){
      reason='NO_EXECUTABLE_ASK_DEPTH';continue;
    }
    if(!Number.isFinite(Date.parse(fresh.closeTime||''))||
