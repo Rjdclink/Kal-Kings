@@ -105,12 +105,12 @@ function renderFeeds(){
   return;
  }
  const rows=data.topSports?.kalshi||[];
- const signals=(data.predictiveStrategies||[]).filter(r=>['TOTAL_ALREADY_OVER','LATE_GAME_LEAD'].includes(r.strategy));
+ const signals=(data.predictiveStrategies||[]).filter(r=>['LIVE_SPORTS_SCORE','TOTAL_ALREADY_OVER','LATE_GAME_LEAD'].includes(r.strategy));
  const quotes=rows.slice(0,10).map(x=>`<div class="quote"><div class="line1"><span>${esc(x.event||x.label)}</span><span class="pr">${x.yesAsk==null?'—':(x.yesAsk*100).toFixed(1)+'¢ YES'}</span></div><div class="line2"><span>${esc(x.id||x.label||'Kalshi')}</span><span>${time(x.updatedAt||x.observedAt)}</span></div></div>`).join('');
  const liveSignals=signals.slice(0,8).map(x=>{
   const d=x.details||{},g=d.gameContext||d.totalGame||d.game||{};
   const score=g.homeScore!=null&&g.awayScore!=null?`${g.awayTeam||g.away||'Away'} ${g.awayScore} – ${g.homeScore} ${g.homeTeam||g.home||'Home'}`:'Live score verified';
-  const label=x.strategy==='LATE_GAME_LEAD'?'COMMANDING LATE-GAME LEAD':'TOTAL THRESHOLD EXCEEDED';
+  const label=x.strategy==='LATE_GAME_LEAD'?'COMMANDING LATE-GAME LEAD':x.strategy==='TOTAL_ALREADY_OVER'?'TOTAL THRESHOLD EXCEEDED':'LIVE SCORE VERIFIED';
   const ticker=x.marketTicker||d.totalMarket?.ticker||d.market?.ticker||'Awaiting matching Kalshi quote';
   return `<div class="quote"><div class="line1"><span>${esc(x.asset||d.event||'Live game')}</span><span class="pr">${esc(label)}</span></div><div class="line2"><span>${esc(score)} · ${esc(ticker)}</span><span>${time(x.updatedAt)}</span></div></div>`;
  }).join('');
@@ -151,7 +151,7 @@ function renderPredictive(){
    const descriptor=crypto?((signal.agreeingSources||0)+'/7 votes agree · '+(ticker||'No current Kalshi quote')):
       (r.strategy==='LATE_GAME_LEAD'?'Commanding late-game lead'+(scoreLabel?' · '+scoreLabel:'')+' · '+(ticker||'Awaiting contract'):
        r.strategy==='TOTAL_ALREADY_OVER'?'Verified total threshold exceeded'+(scoreLabel?' · '+scoreLabel:'')+' · '+(ticker||'Awaiting contract'):
-       'Live game total · '+(ticker||'Awaiting contract'));
+       'Live score verified'+(scoreLabel?' · '+scoreLabel:''));
    const card=canReview?`<button class="btn alt" type="button" data-manual-market="${esc(ticker)}" data-manual-side="${esc(side)}" style="margin-top:7px;padding:7px 10px">Review ${side.toUpperCase()} @ ${(Number(price)*100).toFixed(1)}¢</button>`:'';
    return `<div class="ledgerline"><div><strong>${esc(r.asset)}</strong>
       <div class="tiny">${esc(descriptor)}</div>
