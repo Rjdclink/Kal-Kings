@@ -194,17 +194,18 @@ async function fetchSportsMarkets(fetcher,sport,now,kind='game'){
  const batches=await Promise.allSettled(seriesList.map(async series=>{
    const all=[];let cursor=null;
    for(let page=0;page<5;page++){
-     let url=KALSHI+'/events?series_ticker='+encodeURIComponent(series)+'&status=open&limit=200&with_nested_markets=true';
+     let url=KALSHI+'/markets?series_ticker='+encodeURIComponent(series)+'&status=open&limit=1000';
      if(cursor)url+='&cursor='+encodeURIComponent(cursor);
      const j=await json(fetcher,url);
-     all.push(...(j.events||[]).flatMap(e=>(e.markets||[]).map(m=>({
-       ticker:m.ticker,status:m.status,eventTicker:e.event_ticker,
+     all.push(...(j.markets||[]).map(m=>({
+       ticker:m.ticker,status:m.status,eventTicker:m.event_ticker,
        yesAsk:safe(m.yes_ask_dollars),noAsk:safe(m.no_ask_dollars),
        yesBid:safe(m.yes_bid_dollars),noBid:safe(m.no_bid_dollars),
-       yesDepth:safe(m.yes_ask_size_fp),noDepth:safe(m.no_ask_size_fp),
+       yesDepth:safe(m.yes_ask_size_fp??m.yes_ask_size),
+       noDepth:safe(m.no_ask_size_fp??m.no_ask_size),
        rulesPrimary:m.rules_primary||'',floorStrike:safe(m.floor_strike),closeTime:m.close_time,
-       observedAt:new Date(now).toISOString(),eventTitle:e.title||'',marketTitle:m.title||'',
-       source:'Kalshi'}))));
+       observedAt:new Date(now).toISOString(),eventTitle:m.event_ticker||'',marketTitle:m.title||m.subtitle||'',
+       source:'Kalshi'})));
      cursor=j.cursor||null;
      if(!cursor)break;
    }
