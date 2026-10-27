@@ -37,7 +37,7 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
     const finish=async result=>{
       try{
         await sql('UPDATE kal_kings_solo_runs SET result=$2,finished_at=now() WHERE invocation_id=$1',[invocationId,result.status]);
-        try{await recordScan({...scanMeta,...result})}catch{/* Diagnostics must not prevent future scans. */}
+        try{await recordScan({...scanMeta,...result,stage})}catch{/* Diagnostics must not prevent future scans. */}
       }finally{
         if(leaseAcquired)try{await releaseScanLease(invocationId)}catch{/* Lease expires automatically. */}
       }
