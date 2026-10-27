@@ -67,7 +67,22 @@ export async function spotMomentum(fetcher,symbol,now){
 
 const SPORTS_MARKET_SERIES={NFL:'KXNFLGAME',NBA:'KXNBAGAME',NHL:'KXNHLGAME',MLB:'KXMLBGAME',CFB:'KXCFBGAME',CBB:['KXCBBGAME','KXNCAAMBGAME'],EPL:'KXEPLGAME',MLS:'KXMLSGAME',WNBA:'KXWNBAGAME'};
 const SPORTS_TOTAL_SERIES={NFL:'KXNFLTOTAL',NBA:'KXNBATOTAL',NHL:'KXNHLTOTAL',MLB:'KXMLBTOTAL',CFB:'KXCFBTOTAL',CBB:['KXCBBTOTAL','KXNCAAMBTOTAL'],EPL:'KXEPLTOTAL',MLS:'KXMLSTOTAL',WNBA:'KXWNBATOTAL'};
-const safe=val=>{const n=Number(val);return Number.isFinite(n)?n:null;};
+const safe=val=>{if(val===null||val===undefined||val==='')return null;const n=Number(val);return Number.isFinite(n)?n:null;};
+// Kalshi's legacy quote fields are integer cents; *_dollars fields are dollars.
+const kalshiPrice=(dollars,cents)=>{
+ if(dollars!==null&&dollars!==undefined&&dollars!==''){
+  const n=Number(dollars);return Number.isFinite(n)&&n>=0&&n<=1?n:null;
+ }
+ if(cents!==null&&cents!==undefined&&cents!==''){
+  const n=Number(cents);return Number.isFinite(n)&&n>=0&&n<=100?n/100:null;
+ }
+ return null;
+};
+const kalshiDepth=(fp,legacy)=>{
+ const v=fp!==null&&fp!==undefined&&fp!==''?fp:legacy;
+ if(v===null||v===undefined||v==='')return null;
+ const n=Number(v);return Number.isFinite(n)&&n>=0?n:null;
+};
 function parseClockSeconds(value,sport,period){
  if(typeof value==='number'&&Number.isFinite(value))return value;
  const raw=String(value??'').trim();
@@ -193,10 +208,10 @@ async function fetchSportsMarkets(fetcher,sport,now,kind='game'){
  if(!seriesList.length)return [];
  const normalize=markets=>(Array.isArray(markets)?markets:[]).map(m=>({
    ticker:m.ticker,status:m.status,eventTicker:m.event_ticker,
-   yesAsk:safe(m.yes_ask_dollars),noAsk:safe(m.no_ask_dollars),
-   yesBid:safe(m.yes_bid_dollars),noBid:safe(m.no_bid_dollars),
-   yesDepth:safe(m.yes_ask_size_fp??m.yes_ask_size),
-   noDepth:safe(m.no_ask_size_fp??m.no_ask_size),
+   yesAsk:kalshiPrice(m.yes_ask_dollars,m.yes_ask),noAsk:kalshiPrice(m.no_ask_dollars,m.no_ask),
+   yesBid:kalshiPrice(m.yes_bid_dollars,m.yes_bid),noBid:kalshiPrice(m.no_bid_dollars,m.no_bid),
+   yesDepth:kalshiDepth(m.yes_ask_size_fp,m.yes_ask_size),
+   noDepth:kalshiDepth(m.no_ask_size_fp,m.no_ask_size),
    rulesPrimary:m.rules_primary||'',floorStrike:safe(m.floor_strike),closeTime:m.close_time,
    observedAt:new Date(now).toISOString(),eventTitle:m.event_ticker||'',
    marketTitle:m.title||m.subtitle||'',source:'Kalshi'
@@ -260,9 +275,9 @@ export async function fetchCryptoSignals({fetcher=fetch,now=Date.now(),symbols=[
     ticker:k.ticker,seriesTicker:`KX${symbol}15M`,symbol,status:k.status,
     rulesPrimary:k.rules_primary||'',closeTime:k.close_time,
     floorStrike:k.floor_strike==null?null:Number(k.floor_strike),
-    yesAsk:integer(k.yes_ask_dollars),noAsk:integer(k.no_ask_dollars),
-    yesDepth:integer(k.yes_ask_size_fp??k.yes_ask_size),
-    noDepth:integer(k.no_ask_size_fp??k.no_ask_size),
+    yesAsk:kalshiPrice(k.yes_ask_dollars,k.yes_ask),noAsk:kalshiPrice(k.no_ask_dollars,k.no_ask),
+    yesDepth:kalshiDepth(k.yes_ask_size_fp,k.yes_ask_size),
+    noDepth:kalshiDepth(k.no_ask_size_fp,k.no_ask_size),
     observedAt:new Date(now).toISOString()
    }));
    const available=markets.filter(x=>['open','active'].includes(x.status)&&
