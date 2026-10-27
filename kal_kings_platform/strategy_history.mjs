@@ -58,7 +58,7 @@ export async function getDirectionalOrders(sql){
    filled_count::text AS filled_count,entry_price::text AS entry_price,
    modeled_probability::text AS modeled_probability,created_at,updated_at
    FROM kal_kings_directional_orders
-   WHERE status IN ('FILLED','PARTIALLY_FILLED') AND filled_count::numeric>0
+   WHERE status='FILLED' AND filled_count::numeric>0
    ORDER BY created_at DESC LIMIT 15`);
  return rows.map(x=>({...x,contracts:Number(x.contracts),
    filled:Number(x.filled_count),price:Number(x.entry_price),
