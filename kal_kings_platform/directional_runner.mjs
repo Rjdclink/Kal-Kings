@@ -21,7 +21,7 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
   const pending=await sql(`SELECT ticker FROM kal_kings_directional_orders
     WHERE status IN ('SUBMITTING','UNCERTAIN','PARTIALLY_FILLED','EXIT_SUBMITTING','EXIT_UNCERTAIN') LIMIT 1`);
   if(pending.length)return {status:'HALTED_PENDING_RECONCILIATION'};
-  let reason='NO_CURRENT_INDEPENDENT_EDGE',alreadyAttempted=false,attempts=0;
+  let reason='NO_CURRENT_INDEPENDENT_EDGE',alreadyAttempted=false,attempts=0,candidateChecks=0;
   // Sports are the primary execution queue: already-exceeded totals first,
   // then verified late-game leads, and crypto only after sports candidates.
   const priority={TOTAL_ALREADY_OVER:0,LATE_GAME_LEAD:1,CRYPTO_DIRECTIONAL_CONSENSUS:2};
@@ -29,6 +29,7 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
     (priority[a?.strategy]??99)-(priority[b?.strategy]??99)||
     (Number(b?.maxAllocationFraction)||0)-(Number(a?.maxAllocationFraction)||0));
   for(const idea of orderedIdeas){
+   candidateChecks++;
    const m=idea?.market,ticker=m?.ticker;
    const isTotal=idea?.strategy==='TOTAL_ALREADY_OVER';
    const isCrypto=idea?.strategy==='CRYPTO_DIRECTIONAL_CONSENSUS';
@@ -61,8 +62,11 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
      [fresh,book]=await Promise.all([fetchMarket(ticker),fetchOrderbook(ticker)]);
      book=normalizeKalshiBook(book);
    }catch{reason='ORDERBOOK_OR_REQUOTE_UNAVAILABLE';continue;}
-   if(!fresh||fresh.id!==ticker||!['open','active'].includes(fresh.status)||!(isCrypto&&idea.side==='no'?book.noAsks?.length:book.yesAsks?.length)){
-     reason='LIVE_MARKET_NOT_OPEN';continue;
+   if(!fresh){reason='FRESH_MARKET_UNAVAILABLE_OR_INACTIVE';continue;}
+   if(fresh.id!==ticker){reason='FRESH_MARKET_TICKER_MISMATCH';continue;}
+   if(!['open','active'].includes(fresh.status)){reason='FRESH_MARKET_NOT_OPEN';continue;}
+   if(!(isCrypto&&idea.side==='no'?book.noAsks?.length:book.yesAsks?.length)){
+     reason='NO_EXECUTABLE_ASK_DEPTH';continue;
    }
    if(!Number.isFinite(Date.parse(fresh.closeTime||''))||
       Date.parse(fresh.closeTime)<=now()+10000){reason='MARKET_CLOSING';continue;}
@@ -177,13 +181,13 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
    // A verified fill count of zero means no position was opened. Look for
    // another independent market immediately, without waiting a full minute.
    if(status==='NOT_FILLED'){reason='CONFIRMED_NO_FILL';continue;}
-   if(status==='REJECTED')return {status,reason:rejectionReason,ticker,filled:0};
+   if(status==='REJECTED')return {status,reason:rejectionReason,ticker,filled:0,candidateChecks,orderSubmissionAttempts:attempts};
    return {status,ticker,contracts:decision.contracts,filled,
      modeledWinProbability:decision.modeledWinProbability,
      estimatedMaxDebitDollars:decision.estimatedMaxDebitDollars,
      expectedNetDollars:decision.expectedNetDollars??decision.netIfNormallySettledDollars,
-     strategy:idea.strategy};
+     strategy:idea.strategy,candidateChecks,orderSubmissionAttempts:attempts};
   }
-  return {status:alreadyAttempted?'ALREADY_ATTEMPTED':'NO_VERIFIED_DIRECTIONAL_EDGE',reason};
+  return {status:alreadyAttempted?'ALREADY_ATTEMPTED':'NO_VERIFIED_DIRECTIONAL_EDGE',reason,candidateChecks,orderSubmissionAttempts:attempts};
  };
 }
