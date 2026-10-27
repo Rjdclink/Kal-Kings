@@ -100,6 +100,14 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
        maxBankrollFraction:isCrypto?Math.min(Number(idea.allocationFraction),Number(finalConsensus.allocationFraction)):null,
        consensusConfidenceScorePercent:finalScore?.scorePercent??null});
    if(!decision.allowed){reason=decision.reason;continue;}
+   // Final account-level affordability guard: never submit a trade whose
+   // all-in debit is unknown or exceeds the currently verified cash balance.
+   const availableCash=Number(account.balance);
+   const allInDebit=Number(decision.estimatedMaxDebitDollars);
+   if(!Number.isFinite(availableCash)||availableCash<=0||
+      !Number.isFinite(allInDebit)||allInDebit<=0||allInDebit>availableCash){
+     reason='INSUFFICIENT_VERIFIED_BANKROLL';continue;
+   }
    // Each strategy's order planner already enforces its own bankroll cap.
    // A second unrelated 2% check would falsely veto profitable total orders.
    if(attempts>=4){reason='MAX_ORDER_ATTEMPTS_THIS_CYCLE';break;}
