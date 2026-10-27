@@ -32,7 +32,7 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
     // Database idempotence also protects against webhook redelivery.
     const lock=await sql('INSERT INTO kal_kings_solo_runs(invocation_id,scheduled_at) VALUES($1,$2::timestamptz) ON CONFLICT DO NOTHING RETURNING invocation_id',[invocationId,scheduledAt]);
     if(!lock.length)return {status:'DUPLICATE_RUN'};
-    let scanMeta={cryptoSignals:0,sportsSignals:0,universeScanned:0,ideaCount:0,directionalReason:null};
+    let scanMeta={cryptoSignals:0,sportsSignals:0,universeScanned:0,ideaCount:0,directionalReason:null,totalProofDiagnostics:null,priorityOrder:['TOTAL_ALREADY_OVER','LATE_GAME_LEAD','CRYPTO_DIRECTIONAL_CONSENSUS']};
     let leaseAcquired=false;
     const finish=async result=>{
       try{
@@ -66,7 +66,9 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
       try{predictive=await scanPredictive()}catch{/* Never let an advisory feed cause blind orders or stop cash reconciliation. */}
       scanMeta={...scanMeta,cryptoSignals:Number(predictive?.cryptoSignals)||0,
         sportsSignals:Number(predictive?.sportsSignals)||0,universeScanned:Number(predictive?.universeScanned)||0,
-        ideaCount:Array.isArray(predictive?.ideas)?predictive.ideas.length:0};
+        ideaCount:Array.isArray(predictive?.ideas)?predictive.ideas.length:0,
+        totalProofDiagnostics:predictive?.totalProofDiagnostics||null,
+        priorityOrder:predictive?.priorityOrder||['TOTAL_ALREADY_OVER','LATE_GAME_LEAD','CRYPTO_DIRECTIONAL_CONSENSUS']};
       stage='ACCOUNT';
       if(monitored?.status==='ACCOUNT_UNAVAILABLE')return finish({status:'ACCOUNT_UNAVAILABLE'});
       const verifiedCash=Number(monitored?.freeCash);
