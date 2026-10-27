@@ -21,7 +21,7 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
   const pending=await sql(`SELECT ticker FROM kal_kings_directional_orders
     WHERE status IN ('SUBMITTING','UNCERTAIN','PARTIALLY_FILLED','EXIT_SUBMITTING','EXIT_UNCERTAIN') LIMIT 1`);
   if(pending.length)return {status:'HALTED_PENDING_RECONCILIATION'};
-  let reason='NO_CURRENT_INDEPENDENT_EDGE',alreadyAttempted=false,attempts=0,candidateChecks=0;
+  let reason='NO_CURRENT_INDEPENDENT_EDGE',alreadyAttempted=false,attempts=0,candidateChecks=0,lastCheckedTicker=null,lastCheckedStrategy=null;
   // Sports are the primary execution queue: already-exceeded totals first,
   // then verified late-game leads, and crypto only after sports candidates.
   const priority={TOTAL_ALREADY_OVER:0,LATE_GAME_LEAD:1,CRYPTO_DIRECTIONAL_CONSENSUS:2};
@@ -31,6 +31,7 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
   for(const idea of orderedIdeas){
    candidateChecks++;
    const m=idea?.market,ticker=m?.ticker;
+   lastCheckedTicker=validTicker(ticker)?ticker:null;lastCheckedStrategy=String(idea?.strategy||'').slice(0,64);
    const isTotal=idea?.strategy==='TOTAL_ALREADY_OVER';
    const isCrypto=idea?.strategy==='CRYPTO_DIRECTIONAL_CONSENSUS';
    if(!['LATE_GAME_LEAD','TOTAL_ALREADY_OVER','CRYPTO_DIRECTIONAL_CONSENSUS'].includes(idea?.strategy)||
@@ -181,13 +182,13 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
    // A verified fill count of zero means no position was opened. Look for
    // another independent market immediately, without waiting a full minute.
    if(status==='NOT_FILLED'){reason='CONFIRMED_NO_FILL';continue;}
-   if(status==='REJECTED')return {status,reason:rejectionReason,ticker,filled:0,candidateChecks,orderSubmissionAttempts:attempts};
+   if(status==='REJECTED')return {status,reason:rejectionReason,ticker,filled:0,candidateChecks,orderSubmissionAttempts:attempts,lastCheckedTicker,lastCheckedStrategy};
    return {status,ticker,contracts:decision.contracts,filled,
      modeledWinProbability:decision.modeledWinProbability,
      estimatedMaxDebitDollars:decision.estimatedMaxDebitDollars,
      expectedNetDollars:decision.expectedNetDollars??decision.netIfNormallySettledDollars,
-     strategy:idea.strategy,candidateChecks,orderSubmissionAttempts:attempts};
+     strategy:idea.strategy,candidateChecks,orderSubmissionAttempts:attempts,lastCheckedTicker,lastCheckedStrategy};
   }
-  return {status:alreadyAttempted?'ALREADY_ATTEMPTED':'NO_VERIFIED_DIRECTIONAL_EDGE',reason,candidateChecks,orderSubmissionAttempts:attempts};
+  return {status:alreadyAttempted?'ALREADY_ATTEMPTED':'NO_VERIFIED_DIRECTIONAL_EDGE',reason,candidateChecks,orderSubmissionAttempts:attempts,lastCheckedTicker,lastCheckedStrategy};
  };
 }
