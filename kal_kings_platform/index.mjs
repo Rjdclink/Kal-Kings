@@ -417,7 +417,7 @@ async function collectPredictiveStrategies(){
         source_count:1,market_ticker:m.ticker,details:{...x,totalMarket:m}})),
      ...(x.lateGame?.direction?[{asset:x.event,strategy:'LATE_GAME_LEAD',
        direction:x.lateGame.direction,status:x.lateGame.reason,
-       source_count:1,market_ticker:null,details:x}]:[]),
+       source_count:1,market_ticker:x.market?.ticker||null,details:x}]:[]),
      ...(x.totals?.direction?[{asset:x.event,strategy:'OVER_UNDER_CONTEXT',
        direction:x.totals.direction,status:x.totals.reason,
        source_count:1,market_ticker:null,details:x}]:[])
@@ -436,10 +436,20 @@ async function collectPredictiveStrategies(){
      (x.totalMarket?[x.totalMarket]:[]);
    if(!x.totalGame)return [];
    return markets.flatMap(m=>{
+     totalProofDiagnostics.checked++;
      const proof=verifyExceededTotal({game:x.totalGame,market:m,now});
-     if(!proof.eligible)return [];
+     if(!proof.eligible){
+       const reason=String(proof.reason||'UNKNOWN_REJECTION');
+       totalProofDiagnostics.rejected[reason]=(totalProofDiagnostics.rejected[reason]||0)+1;
+       return [];
+     }
+     totalProofDiagnostics.eligible++;
      const price=Number(m.yesAsk);
-     if(!(price>0&&price<1)||!(Number(m.yesDepth)>=1))return [];
+     if(!(price>0&&price<1)||!(Number(m.yesDepth)>=1)){
+       totalProofDiagnostics.rejected.UNEXECUTABLE_DISCOVERY_QUOTE=
+         (totalProofDiagnostics.rejected.UNEXECUTABLE_DISCOVERY_QUOTE||0)+1;
+       return [];
+     }
      // Discovery deliberately does not assume a single-share fee proves
      // profitability. The final Kalshi order check tests actual quantity,
      // official fee multiplier, executable book depth, and free cash.
@@ -472,13 +482,16 @@ async function collectPredictiveStrategies(){
  return {cryptoSignals:cryptos.length,sportsSignals:sports.length,stored:rows.length,ideas,totalProofDiagnostics,priorityOrder:['TOTAL_ALREADY_OVER','LATE_GAME_LEAD','CRYPTO_DIRECTIONAL_CONSENSUS'],universeScanned:universeResponse.status==='fulfilled'?universeResponse.value.scanned:0};
 }
 async function getPredictiveStrategies(){
- const rows=await sql(`SELECT DISTINCT ON (asset,strategy) asset,strategy,direction,status,
-   source_count,market_ticker,details::text AS details,observed_at
-   FROM kal_kings_predictive_signals
-    WHERE asset <> 'BTC' AND ((strategy='CRYPTO_DIRECTIONAL_CONSENSUS' AND observed_at>now()-interval '90 seconds')
+ const rows=await sql(`SELECT asset,strategy,direction,status,source_count,market_ticker,
+   details::text AS details,observed_at FROM (
+     SELECT DISTINCT ON (asset,strategy) asset,strategy,direction,status,source_count,
+       market_ticker,details,observed_at
+     FROM kal_kings_predictive_signals
+     WHERE asset <> 'BTC' AND ((strategy='CRYPTO_DIRECTIONAL_CONSENSUS' AND observed_at>now()-interval '120 seconds')
        OR (strategy IN ('LIVE_SPORTS_SCORE','LATE_GAME_LEAD','TOTAL_ALREADY_OVER','OVER_UNDER_CONTEXT')
-           AND observed_at>now()-interval '25 seconds'))
-    ORDER BY asset,strategy,observed_at DESC LIMIT 40`);
+           AND observed_at>now()-interval '120 seconds'))
+     ORDER BY asset,strategy,observed_at DESC
+   ) latest ORDER BY observed_at DESC LIMIT 100`);
  return rows.map(r=>({asset:r.asset,strategy:r.strategy,direction:r.direction,
    status:r.status,sourceCount:Number(r.source_count),marketTicker:r.market_ticker,
    updatedAt:r.observed_at,details:typeof r.details==='string'?JSON.parse(r.details):r.details}));
