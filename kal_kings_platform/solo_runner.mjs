@@ -32,7 +32,7 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
     // Database idempotence also protects against webhook redelivery.
     const lock=await sql('INSERT INTO kal_kings_solo_runs(invocation_id,scheduled_at) VALUES($1,$2::timestamptz) ON CONFLICT DO NOTHING RETURNING invocation_id',[invocationId,scheduledAt]);
     if(!lock.length)return {status:'DUPLICATE_RUN'};
-    let scanMeta={cryptoSignals:0,sportsSignals:0,universeScanned:0,ideaCount:0,directionalReason:null,totalProofDiagnostics:null,priorityOrder:['TOTAL_ALREADY_OVER','LATE_GAME_LEAD','CRYPTO_DIRECTIONAL_CONSENSUS']};
+    let scanMeta={cryptoSignals:0,sportsSignals:0,universeScanned:0,ideaCount:0,directionalReason:null,executionCandidateChecks:0,orderSubmissionAttempts:0,totalProofDiagnostics:null,priorityOrder:['TOTAL_ALREADY_OVER','LATE_GAME_LEAD','CRYPTO_DIRECTIONAL_CONSENSUS']};
     let leaseAcquired=false;
     const finish=async result=>{
       try{
@@ -93,6 +93,8 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
           account:{status:'VERIFIED',balance,holdings:account?.holdings,
             positionsComplete:account?.positionsComplete}});
         scanMeta.directionalReason=dir?.reason||dir?.status||'NOT_APPROVED';
+        scanMeta.executionCandidateChecks=Number(dir?.candidateChecks)||0;
+        scanMeta.orderSubmissionAttempts=Number(dir?.orderSubmissionAttempts)||0;
         if(['FILLED','PARTIALLY_FILLED','UNCERTAIN'].includes(dir?.status))
           return finish({status:'DIRECTIONAL_'+dir.status,ticker:dir.ticker});
         if(dir?.status==='REJECTED')return finish({status:'DIRECTIONAL_REJECTED',reason:dir.reason,ticker:dir.ticker});
