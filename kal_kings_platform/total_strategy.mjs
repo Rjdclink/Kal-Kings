@@ -24,7 +24,7 @@ export function assessAlreadyExceededTotal({
  const a=String(game.awayAbbreviation||'').toUpperCase(),h=String(game.homeAbbreviation||'').toUpperCase();
  const ticker=String(market?.ticker||'');
  const tickerMatches=type=>game.sport==='MLB'?
-   new RegExp('^'+type+'-'+dateCode+'\\\\d{4}(?:'+a+h+'|'+h+a+')-').test(ticker):
+   new RegExp('^'+type+'-'+dateCode+'\\d{4}(?:'+a+h+'|'+h+a+')-').test(ticker):
    ticker.startsWith(type+'-'+dateCode+a+h+'-')||ticker.startsWith(type+'-'+dateCode+h+a+'-');
  if(!series||!dateCode||!/^[A-Z]{2,4}$/.test(a)||!/^[A-Z]{2,4}$/.test(h)||
    a===h||!series.some(tickerMatches))
