@@ -75,8 +75,6 @@ const shortDate=date=>{
 };
 const TEAM_TICKER_ALIASES={NBA:{BKN:['BRK'],NYK:['NY'],GSW:['GS'],NOP:['NO'],SAS:['SA'],UTA:['UTAH'],PHX:['PHO']},NHL:{LAK:['LA'],SJS:['SJ'],TBL:['TB'],NJD:['NJ'],VGK:['VEG']},MLB:{CWS:['CHW'],KCR:['KC'],SDP:['SD'],SFG:['SF'],TBR:['TB'],WSN:['WSH'],ATH:['OAK']},NFL:{WSH:['WAS'],JAC:['JAX'],LAR:['LA'],LAC:['SD'],LV:['OAK']},CFB:{},CBB:{},WNBA:{},EPL:{},MLS:{}};
 const teamAliases=(sport,team)=>[...new Set([String(team||'').toUpperCase(),...(TEAM_TICKER_ALIASES[sport]?.[String(team||'').toUpperCase()]||[])])];
-const TEAM_TICKER_ALIASES={NBA:{BKN:['BRK'],NYK:['NY'],GSW:['GS'],NOP:['NO'],SAS:['SA'],UTA:['UTAH'],PHX:['PHO']},NHL:{LAK:['LA'],SJS:['SJ'],TBL:['TB'],NJD:['NJ'],VGK:['VEG']},MLB:{CWS:['CHW'],KCR:['KC'],SDP:['SD'],SFG:['SF'],TBR:['TB'],WSN:['WSH'],ATH:['OAK']},NFL:{WSH:['WAS'],JAC:['JAX'],LAR:['LA'],LAC:['SD'],LV:['OAK']},CFB:{},CBB:{},WNBA:{},EPL:{},MLS:{}};
-const teamAliases=(sport,team)=>[...new Set([String(team||'').toUpperCase(),...(TEAM_TICKER_ALIASES[sport]?.[String(team||'').toUpperCase()]||[])])];
 export function matchSportsOutcome(event,market){
  const denied={matched:false,reason:'UNVERIFIED_EVENT_IDENTITY'};
  const prefixes={NFL:['KXNFLGAME'],NBA:['KXNBAGAME'],NHL:['KXNHLGAME'],MLB:['KXMLBGAME'],CFB:['KXCFBGAME'],CBB:['KXCBBGAME','KXNCAAMBGAME'],WNBA:['KXWNBAGAME'],EPL:['KXEPLGAME'],MLS:['KXMLSGAME']};
