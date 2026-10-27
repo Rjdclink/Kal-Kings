@@ -464,7 +464,7 @@ async function collectPredictiveStrategies(){
    });
  }).sort((a,b)=>b.possibleSettlementMargin-a.possibleSettlementMargin||
     Date.parse(a.market.closeTime)-Date.parse(b.market.closeTime));
- const rankedLate=sports.filter(x=>x.lateGame?.eligibleForAutomation===true&&x.lateGame?.reason==='COMMANDING_LATE_LEAD'&&x.gameContext&&x.totalGame)
+ const rankedLate=sports.filter(x=>x.lateGame?.eligibleForAutomation===true&&x.lateGame?.reason==='COMMANDING_LATE_LEAD'&&x.gameContext)
    .map(x=>{
      const game=x.gameContext,tier=sportsLeadTier({sport:game.sport,period:game.period,
        clockSeconds:game.clockSeconds,lead:x.lateGame.lead});
