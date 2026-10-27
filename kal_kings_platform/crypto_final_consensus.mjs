@@ -3,11 +3,11 @@
  * These votes confirm price level, not a guarantee of settlement.
  */
 const venueNames=['coinbase','kraken','bitstamp','gemini','okx','kucoin','bitfinex'];
-const symbols=new Set(['BTC','ETH','SOL','XRP','DOGE','ADA']);
+const symbols=new Set(['ETH','SOL','XRP','DOGE','ADA']);
 const numeric=x=>x==null||x===''?NaN:Number(x);
 const pOk=x=>Number.isFinite(x)&&x>0;
 const quoteUrl=(venue,symbol)=>{
- const pair=symbol==='BTC'?'XBT':symbol;
+ const pair=symbol;
  const low=symbol.toLowerCase();
  return {
   coinbase:`https://api.exchange.coinbase.com/products/${symbol}-USD/ticker`,
