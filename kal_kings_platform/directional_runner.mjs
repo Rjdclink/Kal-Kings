@@ -31,11 +31,16 @@ export function resolveExecutableAskBook(book,market,side,now=Date.now()){
  const price=Number(side==='yes'?market?.yesAsk:market?.noAsk);
  const quantity=Number(side==='yes'?market?.yesDepth:market?.noDepth);
  const ageMs=now-observed;
- if(!['active','open'].includes(market?.status)||!Number.isFinite(ageMs)||
-    ageMs<0||ageMs>3000||!Number.isFinite(price)||price<=0||price>=1||
-    !Number.isFinite(quantity)||quantity<1)return {book:normalized,source:null};
+ if(!['active','open'].includes(market?.status))
+   return {book:normalized,source:null,reason:'FRESH_MARKET_NOT_OPEN'};
+ if(!Number.isFinite(ageMs)||ageMs<0||ageMs>3000)
+   return {book:normalized,source:null,reason:'STALE_MARKET_QUOTE'};
+ const reasons=[];
+ if(!Number.isFinite(price)||price<=0||price>=1)reasons.push('ASK_PRICE_INVALID_OR_AT_BOUNDARY');
+ if(!Number.isFinite(quantity)||quantity<1)reasons.push('NO_DISPLAYED_ASK_SIZE');
+ if(reasons.length)return {book:normalized,source:null,reason:reasons.join('_AND_')};
  return {book:{...normalized,[field]:[{price:Math.round(price*10000)/10000,quantity}]},
-   source:'MARKET_TOP_OF_BOOK'};
+   source:'MARKET_TOP_OF_BOOK',reason:null};
 }
 export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSchedule,
  fetchFinalConsensus,submit,createId,now=Date.now}){
@@ -96,7 +101,7 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
    const resolvedBook=resolveExecutableAskBook(book,fresh,orderSide,now());
    book=resolvedBook.book;
    if(!resolvedBook.source){
-     reason='NO_EXECUTABLE_ASK_DEPTH';continue;
+     reason=resolvedBook.reason||'NO_EXECUTABLE_ASK_DEPTH';continue;
    }
    if(!Number.isFinite(Date.parse(fresh.closeTime||''))||
       Date.parse(fresh.closeTime)<=now()+10000){reason='MARKET_CLOSING';continue;}
