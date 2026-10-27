@@ -215,19 +215,6 @@ $('#manualConfirmation').addEventListener('click',async event=>{
    $('#manualConfirmation').innerHTML='';
  }
 });
-function renderUniverse(){
- const u=data.marketUniverse||{},rows=u.research||[];
- $('#universeCount').textContent=(u.scanned||0)+' checked / page';
- const sectors=Object.entries(u.byCategory||{}).sort((a,b)=>b[1]-a[1])
-   .map(([k,n])=>k+': '+n).slice(0,7);
- $('#universeSummary').textContent=(u.status==='ROLLING_PUBLIC_MARKET_SCAN'?
-   (u.eligibleQuoted||0)+' priced · '+(sectors.join(' · ')||'All categories')+
-   ' · latest '+time(u.asOf)+'.':'Market survey awaiting data.')+
-   ' These are market quotes, not verified profits.';
- $('#universeCards').innerHTML=rows.length?rows.slice(0,14).map(m=>
-   `<div class="ledgerline"><div><strong>${esc(m.title||m.ticker)}</strong><div class="tiny">${esc(m.category)} · ${esc(m.ticker)}</div></div><div class="number">${m.yesAsk==null?'—':(100*Number(m.yesAsk)).toFixed(1)+'¢'}<div class="tiny">YES ask · research</div></div></div>`).join(''):
-   '<div class="tiny">No usable price quotes found in this sampled page.</div>';
-}
 function renderDirectional(){
  const status=data.scannerStatus||{},details=status.details||{};
  const reported=status.status||'NO_SCANNER_RESULT';
@@ -249,7 +236,7 @@ function renderManualStatus(){
  const statuses={FILLED:'Filled',NOT_FILLED:'Not filled',PARTIALLY_FILLED:'Partly filled',REJECTED:'Rejected by Kalshi',UNCERTAIN:'Awaiting exchange reconciliation',SUBMITTING:'Checking order receipt',NOT_ELIGIBLE:'Quote changed / not available'};
  $('#manualHistory').innerHTML=rows.length?'<div class="detail-title">Recent manual orders</div>'+rows.slice(0,5).map(x=>`<div class="status-line"><span>${esc(x.ticker)} · ${esc(x.side?.toUpperCase())}</span><span>${esc(statuses[x.status]||x.status)}${x.reason?' · '+esc(x.reason.replaceAll('_',' ').toLowerCase()):''}</span></div>`).join(''):'<div class="tiny">No confirmed manual orders yet.</div>';
 }
-function render(){renderStatus();renderPendingSettlements();renderRecentSettlements();renderOp();renderAutoOrders();renderProviders();renderFeeds();renderPredictive();renderUniverse();renderDirectional();renderCrawlerSources();renderManualStatus();}
+function render(){renderStatus();renderPendingSettlements();renderRecentSettlements();renderOp();renderAutoOrders();renderProviders();renderFeeds();renderPredictive();renderDirectional();renderCrawlerSources();renderManualStatus();}
 async function refresh(){if(pending||!admin)return;pending=true;const n=++seq;try{const incoming=await api('/api/state');if(n!==seq)return;data=incoming;render();}catch(e){if(String(e.message).includes('administrator')){authenticated(false);return;}$('#liveDot').classList.add('off');$('#liveLabel').textContent='Connection issue';$('#synced').textContent='Last attempt: '+new Date().toLocaleTimeString();}finally{pending=false;}}
 $('#sportsTab').onclick=()=>{active='sports';$('#sportsTab').classList.add('active');renderFeeds();};
 let localModel=null,localModelId='';
