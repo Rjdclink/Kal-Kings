@@ -95,6 +95,10 @@ export function makeDirectionalRunner({sql,fetchMarket,fetchOrderbook,fetchFeeSc
    if(!fresh){reason='FRESH_MARKET_UNAVAILABLE_OR_INACTIVE';continue;}
    if(fresh.id!==ticker){reason='FRESH_MARKET_TICKER_MISMATCH';continue;}
    if(!['open','active'].includes(fresh.status)){reason='FRESH_MARKET_NOT_OPEN';continue;}
+   const expectedExpiry=Date.parse(fresh.expectedExpirationTime||'');
+   if(Number.isFinite(expectedExpiry)&&expectedExpiry<=now()){
+     reason='EXPECTED_EXPIRATION_PASSED';continue;
+   }
    try{book=normalizeKalshiBook(await fetchOrderbook(ticker))}
    catch{book=null}
    const orderSide=isCrypto&&idea.side==='no'?'no':'yes';
