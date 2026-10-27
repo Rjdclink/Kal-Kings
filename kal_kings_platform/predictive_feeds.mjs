@@ -67,6 +67,12 @@ export async function spotMomentum(fetcher,symbol,now){
 
 const SPORTS_MARKET_SERIES={NFL:'KXNFLGAME',NBA:'KXNBAGAME',NHL:'KXNHLGAME',MLB:'KXMLBGAME',CFB:'KXCFBGAME',CBB:['KXCBBGAME','KXNCAAMBGAME'],EPL:'KXEPLGAME',MLS:'KXMLSGAME',WNBA:'KXWNBAGAME'};
 const SPORTS_TOTAL_SERIES={NFL:'KXNFLTOTAL',NBA:'KXNBATOTAL',NHL:'KXNHLTOTAL',MLB:'KXMLBTOTAL',CFB:'KXCFBTOTAL',CBB:['KXCBBTOTAL','KXNCAAMBTOTAL'],EPL:'KXEPLTOTAL',MLS:'KXMLSTOTAL',WNBA:'KXWNBATOTAL'};
+function matchesSportsTicker(sport,series,dateCode,away,home,ticker){
+ const t=String(ticker||'');
+ if(sport==='MLB')return new RegExp('^'+series+'-'+dateCode+'\\d{4}(?:'+away+home+'|'+home+away+')-').test(t);
+ return t.startsWith(series+'-'+dateCode+away+home+'-')||
+   t.startsWith(series+'-'+dateCode+home+away+'-');
+}
 const safe=val=>{if(val===null||val===undefined||val==='')return null;const n=Number(val);return Number.isFinite(n)?n:null;};
 // Kalshi's legacy quote fields are integer cents; *_dollars fields are dollars.
 const kalshiPrice=(dollars,cents)=>{
@@ -160,9 +166,9 @@ export function selectTotalsMarket(game,markets){
  const [y,m,d]=date.split('-'),code=d+['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][Number(m)-1]+y.slice(-2);
  const a=String(game?.awayAbbreviation||'').toUpperCase(),h=String(game?.homeAbbreviation||'').toUpperCase();
  if(!a||!h||a===h||!Number.isFinite(Number(game?.totalLine)))return null;
- const keys=[prefix+'-'+code+a+h+'-',prefix+'-'+code+h+a+'-'];
+ const prefixes=Array.isArray(prefix)?prefix:[prefix];
  const matches=(Array.isArray(markets)?markets:[]).filter(q=>
-  keys.some(k=>String(q.ticker||'').startsWith(k))&&
+  prefixes.some(series=>matchesSportsTicker(game.sport,series,code,a,h,q.ticker))&&
   ['active','open'].includes(q.status)&&q.floorStrike!=null&&
   Number.isFinite(Number(q.floorStrike))&&q.yesAsk>0&&q.yesAsk<1&&
   /(collectively score more than|score more goals than|score more runs than|combined score.*more than)/i.test(q.rulesPrimary||''))
@@ -185,10 +191,9 @@ export function selectExceededTotalsMarkets(game,markets,{now=Date.now(),max=24}
  const home=String(game?.homeAbbreviation||'').toUpperCase(),
    away=String(game?.awayAbbreviation||'').toUpperCase();
  if(!/^[A-Z]{2,4}$/.test(home)||!/^[A-Z]{2,4}$/.test(away)||home===away)return [];
- const prefixes=[series+'-'+short+away+home+'-',series+'-'+short+home+away+'-'];
  return (Array.isArray(markets)?markets:[]).filter(x=>{
    const strike=Number(x?.floorStrike),ask=Number(x?.yesAsk),depth=Number(x?.yesDepth);
-   return prefixes.some(prefix=>String(x.ticker||'').startsWith(prefix))&&
+   return (Array.isArray(series)?series:[series]).some(type=>matchesSportsTicker(game.sport,type,short,away,home,x.ticker))&&
      ['active','open'].includes(x.status)&&
      Number.isFinite(strike)&&strike>0&&score>strike&&
      Number.isFinite(ask)&&ask>0&&ask<1&&
