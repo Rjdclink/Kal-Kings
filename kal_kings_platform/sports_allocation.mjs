@@ -21,7 +21,7 @@ export function sportsLeadTier({sport,period,lead,clockSeconds}={}){
  const periodOk=rule&&(sport==='MLB'?Number(period)>=8:rule.periods.includes(Number(period)));
  if(!rule||!periodOk||!good(left)||left>rule.maxClock||
     !good(difference)||difference<rule.minLead)return {eligible:false,maxAllocationFraction:0,reason:'LEAD_OR_GAME_TIME_NOT_QUALIFIED'};
- const timeStrength=clamp(1-left/rule.maxClock);
+ const timeStrength=rule.maxClock===0?1:clamp(1-left/rule.maxClock);
  const leadStrength=clamp((difference-rule.minLead)/rule.leadSpan);
  const strength=(timeStrength+leadStrength)/2;
  const maxAllocationFraction=strength>=.75?.50:strength>=.5?.35:strength>=.25?.20:.10;
