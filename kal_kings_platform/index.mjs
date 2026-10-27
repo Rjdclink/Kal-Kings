@@ -559,6 +559,8 @@ async function recordScannerStatus(result){
  const details={cryptoSignals:result.cryptoSignals||0,sportsSignals:result.sportsSignals||0,
    universeScanned:result.universeScanned||0,ideaCount:result.ideaCount||0,
    directionalReason:result.directionalReason||null,ticker:result.ticker||null,
+   executionCandidateChecks:Number(result.executionCandidateChecks)||0,
+   orderSubmissionAttempts:Number(result.orderSubmissionAttempts)||0,
    totalProofDiagnostics:result.totalProofDiagnostics||null,
    priorityOrder:result.priorityOrder||['TOTAL_ALREADY_OVER','LATE_GAME_LEAD','CRYPTO_DIRECTIONAL_CONSENSUS']};
  await sql(`INSERT INTO kal_kings_scanner_status
