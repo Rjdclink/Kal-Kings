@@ -106,10 +106,14 @@ export function assessLateGame({sport,home,away,homeScore,awayScore,period,clock
    !finite(number(awayScore))||!finite(number(period))||!finite(number(clockSeconds)))
    return {...base,reason:'STALE_OR_INVALID_LIVE_SCORE'};
  const lead=Math.abs(number(homeScore)-number(awayScore)),leader=Number(homeScore)>Number(awayScore)?home:away;
- const rules={NFL:{period:4,maxClock:600,minLead:14},NBA:{period:4,maxClock:360,minLead:12},
-   NHL:{period:3,maxClock:480,minLead:2}};
- const rule=rules[String(sport||'').toUpperCase()];
- if(!rule||period!==rule.period||clockSeconds>rule.maxClock||lead<rule.minLead)
+ const code=String(sport||'').toUpperCase();
+ const rules={NFL:{periods:[4],maxClock:600,minLead:14},CFB:{periods:[4],maxClock:600,minLead:14},
+   NBA:{periods:[4],maxClock:360,minLead:12},WNBA:{periods:[4],maxClock:300,minLead:10},
+   CBB:{periods:[2],maxClock:360,minLead:12},NHL:{periods:[3],maxClock:480,minLead:2},
+   EPL:{periods:[2],maxClock:900,minLead:2},MLS:{periods:[2],maxClock:900,minLead:2},
+   MLB:{periods:[8,9,10,11,12,13,14,15],maxClock:0,minLead:3}};
+ const rule=rules[code],periodOk=rule&&(code==='MLB'?period>=8:rule.periods.includes(period));
+ if(!rule||!periodOk||clockSeconds>rule.maxClock||lead<rule.minLead)
    return base;
  return {...base,direction:leader,lead,period,clockSeconds,reason:'COMMANDING_LATE_LEAD',
    factors:['Verified live score','Time remaining','Lead margin'],
