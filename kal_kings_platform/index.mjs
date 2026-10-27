@@ -561,6 +561,7 @@ async function recordScannerStatus(result){
    directionalReason:result.directionalReason||null,ticker:result.ticker||null,
    executionCandidateChecks:Number(result.executionCandidateChecks)||0,
    orderSubmissionAttempts:Number(result.orderSubmissionAttempts)||0,
+   lastCheckedTicker:result.lastCheckedTicker||null,lastCheckedStrategy:result.lastCheckedStrategy||null,
    totalProofDiagnostics:result.totalProofDiagnostics||null,
    priorityOrder:result.priorityOrder||['TOTAL_ALREADY_OVER','LATE_GAME_LEAD','CRYPTO_DIRECTIONAL_CONSENSUS']};
  await sql(`INSERT INTO kal_kings_scanner_status
