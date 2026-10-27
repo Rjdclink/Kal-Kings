@@ -8,7 +8,7 @@ export function cryptoConfidenceScore(modeledWinProbability,agreeingSources){
 }
 
 export function selectCryptoIdea(signal,{now=Date.now()}={}){
- if(!signal||!['UP','DOWN'].includes(signal.direction)||!signal.marketTicker)return null;
+ if(!signal||String(signal.symbol||'').toUpperCase()==='BTC'||!['UP','DOWN'].includes(signal.direction)||!signal.marketTicker)return null;
  const n=Number(signal.agreeingSources),fraction=n===7?.4:n===6?.3:n===5?.2:0;
  if(!fraction||Number(signal.reference?.sourceCount)<5||
     signal.reference?.exactBenchmarkReference!==true||
