@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {makeManualExecutor} from './manual_execution.mjs';
 const time=Date.parse('2026-10-26T14:03:00Z');
-const market={id:'KXBTC15M-26OCT261015-15',status:'active',
+const market={id:'KXNFLGAME-26OCT26DALPHI-PHI',status:'active',
   closeTime:new Date(time+10*60000).toISOString(),
   observedAt:new Date(time).toISOString()};
 const book={orderbook_fp:{yes_dollars:[['0.4500','30.00']],no_dollars:[['0.5300','30.00']]}};
@@ -149,4 +149,10 @@ test('resting order with a confirmed partial fill cannot be marked NOT_FILLED af
  cancelUnfilledOrder:async()=>{canceled=true;return {order_id:'kal-order-2',reduced_by:'0.50'};}});
  assert.equal(report.confirmed,1);
  assert.equal(f.intents.get(preview.intentId).status,'PARTIALLY_FILLED');
+});
+
+test('manual trading rejects crypto tickers before querying or submitting orders',async()=>{
+ const f=setup();
+ const result=await f.executor.preview({ticker:'KXETH15M-26OCT261015-15',side:'yes',count:1});
+ assert.equal(result.allowed,false);assert.equal(f.orders.length,0);assert.equal(f.intents.size,0);
 });
