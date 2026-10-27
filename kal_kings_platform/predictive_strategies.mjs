@@ -115,9 +115,10 @@ export function assessLateGame({sport,home,away,homeScore,awayScore,period,clock
  const rule=rules[code],periodOk=rule&&(code==='MLB'?period>=8:rule.periods.includes(period));
  if(!rule||!periodOk||clockSeconds>rule.maxClock||lead<rule.minLead)
    return base;
- return {...base,direction:leader,lead,period,clockSeconds,reason:'COMMANDING_LATE_LEAD',
+ return {...base,action:'EXECUTION_CANDIDATE',eligibleForAutomation:true,
+   direction:leader,lead,period,clockSeconds,reason:'COMMANDING_LATE_LEAD',
    factors:['Verified live score','Time remaining','Lead margin'],
-   note:'Strong lead does not establish favorable odds; independent live probability and fresh Kalshi executable price are required before trading.'};
+   note:'Eligible for a bounded execution attempt only after contract identity, expected expiration, fresh executable price, fees, bankroll, and exposure checks pass.'};
 }
 
 /** Totals pre-filter. Adjust for verified wind, precipitation and key injuries.
