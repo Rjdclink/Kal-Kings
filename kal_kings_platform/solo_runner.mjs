@@ -3,7 +3,7 @@
  * If either FOK leg is ambiguous/partial, disable subsequent automated orders
  * until reconciliation to avoid compounding an uncovered exposure.
  */
-import {findKalshiSoloCandidates,kalshiSoloLegs} from './kalshi_solo.mjs';
+
 const statusFromFill=(r,count)=>{
   const n=Number(r?.fill_count);
   if(!Number.isFinite(n)||n<0||n>count)return 'UNCERTAIN';
@@ -32,7 +32,7 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
     // Database idempotence also protects against webhook redelivery.
     const lock=await sql('INSERT INTO kal_kings_solo_runs(invocation_id,scheduled_at) VALUES($1,$2::timestamptz) ON CONFLICT DO NOTHING RETURNING invocation_id',[invocationId,scheduledAt]);
     if(!lock.length)return {status:'DUPLICATE_RUN'};
-    let scanMeta={cryptoSignals:0,sportsSignals:0,universeScanned:0,ideaCount:0,directionalReason:null,executionCandidateChecks:0,orderSubmissionAttempts:0,lastCheckedTicker:null,lastCheckedStrategy:null,totalProofDiagnostics:null,priorityOrder:['TOTAL_ALREADY_OVER','LATE_GAME_LEAD','CRYPTO_DIRECTIONAL_CONSENSUS']};
+    let scanMeta={sportsSignals:0,universeScanned:0,ideaCount:0,directionalReason:null,sportsExecutionStatus:null,sportsExecutionReason:null,executionCandidateChecks:0,orderSubmissionAttempts:0,lastCheckedTicker:null,lastCheckedStrategy:null,totalProofDiagnostics:null,priorityOrder:['TOTAL_ALREADY_OVER','LATE_GAME_LEAD']};
     let leaseAcquired=false;
     const finish=async result=>{
       try{
@@ -64,11 +64,10 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
       // the existing paired YES/NO engine has no viable opportunity.
       let predictive={ideas:[]};
       try{predictive=await scanPredictive()}catch{/* Never let an advisory feed cause blind orders or stop cash reconciliation. */}
-      scanMeta={...scanMeta,cryptoSignals:Number(predictive?.cryptoSignals)||0,
-        sportsSignals:Number(predictive?.sportsSignals)||0,universeScanned:Number(predictive?.universeScanned)||0,
+      scanMeta={...scanMeta,sportsSignals:Number(predictive?.sportsSignals)||0,universeScanned:Number(predictive?.universeScanned)||0,
         ideaCount:Array.isArray(predictive?.ideas)?predictive.ideas.length:0,
         totalProofDiagnostics:predictive?.totalProofDiagnostics||null,
-        priorityOrder:predictive?.priorityOrder||['TOTAL_ALREADY_OVER','LATE_GAME_LEAD','CRYPTO_DIRECTIONAL_CONSENSUS']};
+        priorityOrder:predictive?.priorityOrder||['TOTAL_ALREADY_OVER','LATE_GAME_LEAD']};
       stage='ACCOUNT';
       if(monitored?.status==='ACCOUNT_UNAVAILABLE')return finish({status:'ACCOUNT_UNAVAILABLE'});
       const verifiedCash=Number(monitored?.freeCash);
@@ -88,136 +87,17 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
         return finish({status:'UNFUNDED'});
       }
       const ideas=Array.isArray(predictive?.ideas)?predictive.ideas:[];
-      // Sports execution gets its own first pass. Crypto cannot consume the
-      // cycle before the sports candidates have reached the live order checks.
+      // Only verified sports candidates are permitted into the order runner.
       const sportsIdeas=ideas.filter(x=>['TOTAL_ALREADY_OVER','LATE_GAME_LEAD'].includes(x?.strategy));
-      const cryptoIdeas=ideas.filter(x=>x?.strategy==='CRYPTO_DIRECTIONAL_CONSENSUS'&&
-        String(x?.symbol||'').toUpperCase()!=='BTC'&&String(x?.asset||'').toUpperCase()!=='BTC');
-      const executeQueue=async(queue,queueStage)=>{
-        if(!queue.length)return null;
-        stage=queueStage;
-        return executeDirectional({ideas:queue,account:{status:'VERIFIED',balance,
-          holdings:account?.holdings,positionsComplete:account?.positionsComplete}});
-      };
-      if(sportsIdeas.length){
-        const sport=await executeQueue(sportsIdeas,'SPORTS_EXECUTION');
-        scanMeta.directionalReason=sport?.reason||sport?.status||'SPORTS_NOT_APPROVED';
-        scanMeta.executionCandidateChecks+=Number(sport?.candidateChecks)||0;
-        scanMeta.orderSubmissionAttempts+=Number(sport?.orderSubmissionAttempts)||0;
-        scanMeta.lastCheckedTicker=sport?.lastCheckedTicker||scanMeta.lastCheckedTicker;
-        scanMeta.lastCheckedStrategy=sport?.lastCheckedStrategy||scanMeta.lastCheckedStrategy;
-        if(['FILLED','PARTIALLY_FILLED','UNCERTAIN'].includes(sport?.status))
-          return finish({status:'SPORTS_'+sport.status,ticker:sport.ticker});
-        if(sport?.status==='REJECTED')
-          return finish({status:'SPORTS_REJECTED',reason:sport.reason,ticker:sport.ticker});
-        if(sport?.status==='HALTED_PENDING_RECONCILIATION')
-          return finish({status:'HALTED_DIRECTIONAL_RECONCILIATION'});
-        scanMeta.sportsExecutionStatus=sport?.status||'UNAVAILABLE';
-        scanMeta.sportsExecutionReason=sport?.reason||null;
+      if(!sportsIdeas.length&&!scanMeta.directionalReason)scanMeta.directionalReason='NO_VERIFIED_MATCHED_SPORTS_CANDIDATE';
+      if(scanMeta.sportsSignals>0){
+        const status=scanMeta.orderSubmissionAttempts>0?'SPORTS_EXECUTION_ATTEMPTED_NO_FILL':
+          scanMeta.ideaCount>0?'SPORTS_SIGNALS_FOUND_NO_EXECUTABLE_ORDER':
+          'SPORTS_SIGNALS_FOUND_NO_EXECUTION_CANDIDATE';
+        return finish({status,reason:scanMeta.sportsExecutionReason||scanMeta.directionalReason||
+          (scanMeta.ideaCount>0?'SPORTS_CANDIDATES_REJECTED_BY_LIVE_EXECUTION_GATES':'NO_VERIFIED_MATCHED_SPORTS_CANDIDATE')});
       }
-      if(cryptoIdeas.length){
-        const crypto=await executeQueue(cryptoIdeas,'CRYPTO_EXECUTION');
-        scanMeta.directionalReason=crypto?.reason||crypto?.status||scanMeta.directionalReason;
-        scanMeta.executionCandidateChecks+=Number(crypto?.candidateChecks)||0;
-        scanMeta.orderSubmissionAttempts+=Number(crypto?.orderSubmissionAttempts)||0;
-        scanMeta.lastCheckedTicker=crypto?.lastCheckedTicker||scanMeta.lastCheckedTicker;
-        scanMeta.lastCheckedStrategy=crypto?.lastCheckedStrategy||scanMeta.lastCheckedStrategy;
-        if(['FILLED','PARTIALLY_FILLED','UNCERTAIN'].includes(crypto?.status))
-          return finish({status:'DIRECTIONAL_'+crypto.status,ticker:crypto.ticker});
-        if(crypto?.status==='REJECTED')
-          return finish({status:'DIRECTIONAL_REJECTED',reason:crypto.reason,ticker:crypto.ticker});
-        if(crypto?.status==='HALTED_PENDING_RECONCILIATION')
-          return finish({status:'HALTED_DIRECTIONAL_RECONCILIATION'});
-      }
-      if(!sportsIdeas.length&&!cryptoIdeas.length&&!scanMeta.directionalReason)
-        scanMeta.directionalReason='NO_VERIFIED_DIRECTIONAL_CANDIDATES';
-      // Preserve bounded real quote histories independently of bank funding.
-      // No-fill and no-funds cycles must not count toward profitable trades.
-      stage='QUOTE_HISTORY';
-      // The old eight-series YES/NO scanner is OPTIONAL for the independent
-      // directional engine. Its outage cannot block a separately verified
-      // late-game or already-crossed total opportunity.
-      let currentQuotes=[];
-      try{
-        const legacy=await fetchQuotes();
-        if(Array.isArray(legacy))currentQuotes=legacy;
-      }catch{/* No legacy quotes; other venue data may still be available. */}
-      if(currentQuotes.length){
-        try{await recordSnapshots(currentQuotes)}
-        catch{/* Missing history is not permission to bypass the live risk gate. */}
-      }
-      scanMeta.legacyQuoteCount=currentQuotes.length;
-      if(!currentQuotes.length)return finish({status:'NO_VALID_LEGACY_QUOTES',
-        reason:'LEGACY_SPORTS_QUOTES_UNAVAILABLE'});
-      stage='QUOTES';
-      const candidates=findKalshiSoloCandidates(currentQuotes,{balance,now:now()});
-      if(!candidates.length){
-        // The legacy YES/NO spread engine is independent from directional sports.
-        // Do not label a sports-signal cycle "no qualifying trade" merely because
-        // the paired-spread strategy found no spread. Surface the actual sports
-        // execution state and blocker to the automation dashboard.
-        if(scanMeta.sportsSignals>0){
-          const status=scanMeta.orderSubmissionAttempts>0?'SPORTS_EXECUTION_ATTEMPTED_NO_FILL':
-            scanMeta.ideaCount>0?'SPORTS_SIGNALS_FOUND_NO_EXECUTABLE_ORDER':
-            'SPORTS_SIGNALS_FOUND_NO_EXECUTION_CANDIDATE';
-          return finish({status,reason:scanMeta.directionalReason||
-            (scanMeta.ideaCount>0?'DIRECTIONAL_CANDIDATES_NOT_EXECUTABLE':'NO_VERIFIED_MATCHED_SPORTS_CANDIDATE')});
-        }
-        return finish({status:'NO_QUALIFYING_KALSHI_TRADE',reason:'NO_POSITIVE_YES_NO_SPREAD_AFTER_FEES'});
-      }
-      for(const idea of candidates){
-        // Requery the exact market immediately before submitting. The scanner
-        // does not treat a 3-second UI refresh as proof of execution freshness.
-        stage='REQUOTE';
-        const exact=await fetchMarket(idea.marketTicker);
-        const refreshed=findKalshiSoloCandidates([exact],{balance,now:now()})[0];
-        if(!refreshed)continue;
-        // Independent order-book, historical fill, and portfolio-risk decision.
-        // Missing, invalid, or inconclusive quantitative evidence cannot
-        // silently fall back to the indicative quote-based order size.
-        stage='QUANT_RISK';
-        let risk;
-        try{
-          risk=typeof quantRiskGate==='function'
-            ? await quantRiskGate({quote:exact,balance,holdings:account?.holdings,
-                positionsComplete:account?.positionsComplete,now:now()})
-            :{accepted:false,reason:'RISK_ENGINE_UNAVAILABLE'};
-        }catch{risk={accepted:false,reason:'RISK_ENGINE_UNAVAILABLE'};}
-        if(!risk?.accepted||!risk.candidate)continue;
-        const selected=risk.candidate;
-        if(selected.marketTicker!==refreshed.marketTicker||selected.source!=='KALSHI_ONLY'||
-           !Number.isInteger(selected.count)||selected.count<1)continue;
-        const firstId=createId(),secondId=createId();
-        stage='RESERVATION';
-        const created=await sql(`INSERT INTO kal_kings_solo_orders(ticker,status,yes_client_order_id,no_client_order_id,contracts,yes_price,no_price,net_profit_dollars,capital_reserved_dollars,created_at)
-          VALUES($1,'SUBMITTING',$2::uuid,$3::uuid,$4,$5,$6,$7,$8,now()) ON CONFLICT(ticker) DO NOTHING RETURNING ticker`,
-          [selected.marketTicker,firstId,secondId,String(selected.count),String(selected.yesPrice),String(selected.noPrice),String(selected.netProfitDollars),String(selected.requiredDollars)]);
-        if(!created.length)continue;
-        const [yes,no]=kalshiSoloLegs(selected,[firstId,secondId]);
-        let yesFill=0,noFill=0;
-        try{
-          const response=await submit(yes);
-          const yesStatus=statusFromFill(response,selected.count);
-          yesFill=Number(response?.fill_count)||0;
-          await sql('UPDATE kal_kings_solo_orders SET yes_filled=$2,yes_order_id=$3,status=$4,updated_at=now() WHERE ticker=$1',
-            [selected.marketTicker,String(yesFill),String(response.order_id||'').slice(0,128)||null,yesStatus==='FILLED'?'YES_FILLED':yesStatus]);
-          if(yesStatus==='NOT_FILLED')return finish({status:'NOT_FILLED'});
-          if(yesStatus!=='FILLED')return finish({status:'UNCERTAIN'});
-          const opposite=await submit(no);
-          const noStatus=statusFromFill(opposite,selected.count);
-          noFill=Number(opposite?.fill_count)||0;
-          const finalStatus=noStatus==='FILLED'?'HEDGED':noStatus==='NOT_FILLED'?'UNHEDGED':'UNCERTAIN';
-          await sql('UPDATE kal_kings_solo_orders SET no_filled=$2,no_order_id=$3,status=$4,updated_at=now() WHERE ticker=$1',
-            [selected.marketTicker,String(noFill),String(opposite.order_id||'').slice(0,128)||null,finalStatus]);
-          return finish({status:finalStatus,marketTicker:selected.marketTicker,yesFilled:yesFill,noFilled:noFill,projectedNetProfitDollars:selected.netProfitDollars});
-        }catch{
-          // A timeout can occur after execution. Never retry blindly.
-          const state=yesFill>0?'UNHEDGED':'UNCERTAIN';
-          await sql('UPDATE kal_kings_solo_orders SET status=$2,updated_at=now() WHERE ticker=$1',[selected.marketTicker,state]);
-          return finish({status:state,marketTicker:selected.marketTicker});
-        }
-      }
-      return finish({status:'NO_QUANT_APPROVED_KALSHI_TRADE'});
+      return finish({status:'NO_LIVE_SPORTS_CANDIDATES',reason:scanMeta.directionalReason});
     }catch{
       return finish({status:`SCANNER_UNAVAILABLE_${stage}`});
     }
