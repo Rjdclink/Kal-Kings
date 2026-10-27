@@ -124,7 +124,20 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
         reason:'LEGACY_SPORTS_QUOTES_UNAVAILABLE'});
       stage='QUOTES';
       const candidates=findKalshiSoloCandidates(currentQuotes,{balance,now:now()});
-      if(!candidates.length)return finish({status:'NO_QUALIFYING_KALSHI_TRADE',reason:'NO_POSITIVE_YES_NO_SPREAD_AFTER_FEES'});
+      if(!candidates.length){
+        // The legacy YES/NO spread engine is independent from directional sports.
+        // Do not label a sports-signal cycle "no qualifying trade" merely because
+        // the paired-spread strategy found no spread. Surface the actual sports
+        // execution state and blocker to the automation dashboard.
+        if(scanMeta.sportsSignals>0){
+          const status=scanMeta.orderSubmissionAttempts>0?'SPORTS_EXECUTION_ATTEMPTED_NO_FILL':
+            scanMeta.ideaCount>0?'SPORTS_SIGNALS_FOUND_NO_EXECUTABLE_ORDER':
+            'SPORTS_SIGNALS_FOUND_NO_EXECUTION_CANDIDATE';
+          return finish({status,reason:scanMeta.directionalReason||
+            (scanMeta.ideaCount>0?'DIRECTIONAL_CANDIDATES_NOT_EXECUTABLE':'NO_VERIFIED_MATCHED_SPORTS_CANDIDATE')});
+        }
+        return finish({status:'NO_QUALIFYING_KALSHI_TRADE',reason:'NO_POSITIVE_YES_NO_SPREAD_AFTER_FEES'});
+      }
       for(const idea of candidates){
         // Requery the exact market immediately before submitting. The scanner
         // does not treat a 3-second UI refresh as proof of execution freshness.
