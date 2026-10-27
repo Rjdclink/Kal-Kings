@@ -86,3 +86,15 @@ test('Neon trigger validation rejects untrusted or stale invocations',()=>{
  assert.equal(isNeonSoloTrigger({'x-neon-trigger-invocation-id':'wrong'},body,now),false);
  assert.equal(isNeonSoloTrigger({'x-neon-trigger-invocation-id':'run-1'},body,now+300000),false);
 });
+
+
+test('MONITORED lifecycle account is normalized to VERIFIED execution contract',async()=>{
+ let receivedAccount=null;
+ const f=fixture({
+  monitorPositions:async()=>({status:'MONITORED',freeCash:80,holdings:[],positionsComplete:true,pendingReview:0}),
+  scanPredictive:async()=>({ideas:[total],sportsSignals:1,universeScanned:10}),
+  executeDirectional:async({account})=>{receivedAccount=account;return {status:'NO_VERIFIED_DIRECTIONAL_EDGE',reason:'TEST_GATE',candidateChecks:1,orderSubmissionAttempts:0};}
+ });
+ await f.run(runInput);
+ assert.deepEqual(receivedAccount,{status:'VERIFIED',balance:80,holdings:[],positionsComplete:true});
+});
