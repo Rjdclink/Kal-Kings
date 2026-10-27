@@ -733,8 +733,16 @@ async function diagnostics(){
  const [db,auth,k,p,crypto]=probes;
  const bal=auth.status==='fulfilled' ? auth.value : null;
  const readable=bal&&((Number.isSafeInteger(bal.balance)&&bal.balance>=0)||(Number.isFinite(Number(bal.balance_dollars))&&Number(bal.balance_dollars)>=0));
+ const authMessage=auth.status==='rejected'?String(auth.reason?.message||''):'';
+ const authHttp=/Provider HTTP (\\d{3})/.exec(authMessage);
+ const authDetail=readable?'NONE':!requiredEnv().kalshiConfigured?'NOT_CONFIGURED':
+  authHttp?('HTTP_'+authHttp[1]):
+  /private key|decoder|key must be/i.test(authMessage)?'PRIVATE_KEY_PARSE_ERROR':
+  /unsupported.*key/i.test(authMessage)?'UNSUPPORTED_PRIVATE_KEY_TYPE':
+  /timeout|abort/i.test(authMessage)?'NETWORK_TIMEOUT':'AUTH_REQUEST_FAILED';
  return {database:db.status==='fulfilled'?'READY':'UNAVAILABLE',
   kalshiAuthentication:readable?'VERIFIED':requiredEnv().kalshiConfigured?'UNAVAILABLE':'NOT_CONFIGURED',
+  kalshiAuthenticationDetail:authDetail,
   kalshiSportsQuotes:k.status==='fulfilled'?k.value.length:null,
   polymarketSportsQuotes:p.status==='fulfilled'?p.value.length:null,
   cryptocurrencyQuotes:crypto.status==='fulfilled'?crypto.value.length:null,
