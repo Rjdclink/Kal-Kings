@@ -4,7 +4,7 @@ export function runCryptoMonteCarlo({symbol,spotPrice,referencePrice,minutesRema
  const age=now-Date.parse(observedAt);
  if(age<0||age>30000)return {status:'STALE_RESEARCH'};
  const price=Number(spotPrice),reference=Number(referencePrice),minutes=Number(minutesRemaining);
- if(!['BTC','ETH','SOL','XRP','DOGE','ADA'].includes(symbol)||
+ if(!['ETH','SOL','XRP','DOGE','ADA'].includes(symbol)||
     !Number.isFinite(price)||price<=0||!Number.isFinite(reference)||reference<=0||
     !Number.isFinite(minutes)||minutes<=0||minutes>15||
     !Number.isInteger(trials)||trials<100||trials>20000)
