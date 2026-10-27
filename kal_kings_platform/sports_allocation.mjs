@@ -6,7 +6,7 @@ const specs=Object.freeze({
  NBA:{periods:[4],maxClock:360,minLead:12,leadSpan:22,scoreSigma:2.5},
  WNBA:{periods:[4],maxClock:300,minLead:10,leadSpan:18,scoreSigma:2.0},
  CBB:{periods:[2],maxClock:360,minLead:12,leadSpan:22,scoreSigma:2.5},
- NHL:{periods:[3],maxClock:480,minLead:2,leadSpan:3,scoreSigma:.35},
+ NHL:{periods:[3],maxClock:600,minLead:2,leadSpan:3,scoreSigma:.35},
  EPL:{periods:[2],maxClock:900,minLead:2,leadSpan:3,scoreSigma:.4},
  MLS:{periods:[2],maxClock:900,minLead:2,leadSpan:3,scoreSigma:.4},
  MLB:{periods:[8,9,10,11,12,13,14,15],maxClock:0,minLead:3,leadSpan:4,scoreSigma:1.0}
