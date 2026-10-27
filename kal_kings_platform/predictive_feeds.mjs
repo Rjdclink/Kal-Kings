@@ -3,6 +3,8 @@ import {assessLateGame,assessTotals} from './predictive_strategies.mjs';
 import {matchSportsOutcome,assessTotalsProjection} from './strategy_optimizer.mjs';
 const KALSHI='https://api.elections.kalshi.com/trade-api/v2';
 const ESPN='https://site.api.espn.com/apis/site/v2/sports';
+const SPORTS_MARKET_SERIES={NFL:'KXNFLGAME',NBA:'KXNBAGAME',NHL:'KXNHLGAME',MLB:'KXMLBGAME',CFB:'KXCFBGAME',CBB:['KXCBBGAME','KXNCAAMBGAME'],WNBA:'KXWNBAGAME',EPL:'KXEPLGAME',MLS:'KXMLSGAME'};
+const SPORTS_TOTAL_SERIES={NFL:'KXNFLTOTAL',NBA:'KXNBATOTAL',NHL:'KXNHLTOTAL',MLB:'KXMLBTOTAL',CFB:'KXCFBTOTAL',CBB:['KXCBBTOTAL','KXNCAAMBTOTAL'],WNBA:'KXWNBATOTAL',EPL:'KXEPLTOTAL',MLS:'KXMLSTOTAL'};
 const integer=n=>Number.isFinite(Number(n))?Number(n):null;
 const timeout=()=>typeof AbortSignal==='undefined'?undefined:AbortSignal.timeout(7000);
 async function json(fetcher,url){
