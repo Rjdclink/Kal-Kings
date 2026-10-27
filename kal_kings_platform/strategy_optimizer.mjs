@@ -75,18 +75,29 @@ const shortDate=date=>{
 };
 export function matchSportsOutcome(event,market){
  const denied={matched:false,reason:'UNVERIFIED_EVENT_IDENTITY'};
- const prefixes={NFL:'KXNFLGAME',NBA:'KXNBAGAME',NHL:'KXNHLGAME'};
- const prefix=prefixes[event?.sport],date=shortDate(event?.date);
+ const prefixes={NFL:['KXNFLGAME'],NBA:['KXNBAGAME'],NHL:['KXNHLGAME'],MLB:['KXMLBGAME'],
+   CFB:['KXCFBGAME'],CBB:['KXCBBGAME','KXNCAAMBGAME'],WNBA:['KXWNBAGAME'],
+   EPL:['KXEPLGAME'],MLS:['KXMLSGAME']};
+ const prefixesForSport=prefixes[event?.sport]||[],date=shortDate(event?.date);
  const home=String(event?.homeAbbreviation||'').toUpperCase(),
    away=String(event?.awayAbbreviation||'').toUpperCase(),
    selected=String(event?.selectedAbbreviation||'').toUpperCase();
- if(!prefix||!date||!home||!away||home===away||![home,away].includes(selected)||
-    !/^[A-Z]{2,4}$/.test(home)||!/^[A-Z]{2,4}$/.test(away))return denied;
+ if(!prefixesForSport.length||!date||!home||!away||home===away||![home,away].includes(selected)||
+   !/^[A-Z]{2,4}$/.test(home)||!/^[A-Z]{2,4}$/.test(away))return denied;
  const ticker=String(market?.ticker||market?.id||'').toUpperCase();
- const expected1=prefix+'-'+date+away+home+'-'+selected;
- const expected2=prefix+'-'+date+home+away+'-'+selected;
- return ticker===expected1||ticker===expected2?{matched:true,reason:'EXACT_DATE_TEAMS_AND_OUTCOME',
-   ticker,eventKey:prefix+'-'+date+away+home}:denied;
+ const matched=prefixesForSport.some(prefix=>{
+   const direct1=prefix+'-'+date+away+home+'-'+selected;
+   const direct2=prefix+'-'+date+home+away+'-'+selected;
+   if(ticker===direct1||ticker===direct2)return true;
+   if(event?.sport==='MLB'){
+     const pattern1=new RegExp('^'+prefix+'-'+date+'\\d{4}'+away+home+'-'+selected+'$');
+     const pattern2=new RegExp('^'+prefix+'-'+date+'\\d{4}'+home+away+'-'+selected+'$');
+     return pattern1.test(ticker)||pattern2.test(ticker);
+   }
+   return false;
+ });
+ return matched?{matched:true,reason:'EXACT_DATE_TEAMS_AND_OUTCOME',ticker,
+   eventKey:prefixesForSport[0]+'-'+date+away+home}:denied;
 }
 /** A possible value entry must be backed by a separately sourced live
  * win-probability estimate AND a verified, presently executable order quote.
