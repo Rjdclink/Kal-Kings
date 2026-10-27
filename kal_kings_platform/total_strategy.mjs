@@ -19,13 +19,13 @@ export function assessAlreadyExceededTotal({
  const home=number(game.homeScore),away=number(game.awayScore);
  if(!finite(observed)||observed<0||observed>20000||
    !finite(home)||!finite(away)||home<0||away<0)return denied('STALE_OR_INVALID_GAME_SCORE');
- const series={NFL:'KXNFLTOTAL',NBA:'KXNBATOTAL',NHL:'KXNHLTOTAL',MLB:'KXMLBTOTAL',CFB:'KXCFBTOTAL',CBB:'KXCBBTOTAL',EPL:'KXEPLTOTAL',MLS:'KXMLSTOTAL',WNBA:'KXWNBATOTAL'}[game.sport];
+ const series={NFL:['KXNFLTOTAL'],NBA:['KXNBATOTAL'],NHL:['KXNHLTOTAL'],MLB:['KXMLBTOTAL'],CFB:['KXCFBTOTAL'],CBB:['KXCBBTOTAL','KXNCAAMBTOTAL'],EPL:['KXEPLTOTAL'],MLS:['KXMLSTOTAL'],WNBA:['KXWNBATOTAL']}[game.sport];
  const dateCode=codeFor(game.date);
  const a=String(game.awayAbbreviation||'').toUpperCase(),h=String(game.homeAbbreviation||'').toUpperCase();
  const ticker=String(market?.ticker||'');
  if(!series||!dateCode||!/^[A-Z]{2,4}$/.test(a)||!/^[A-Z]{2,4}$/.test(h)||
-   a===h||![series+'-'+dateCode+a+h+'-',series+'-'+dateCode+h+a+'-']
-     .some(prefix=>ticker.startsWith(prefix)))
+   a===h||!series.some(type=>[type+'-'+dateCode+a+h+'-',type+'-'+dateCode+h+a+'-']
+     .some(prefix=>ticker.startsWith(prefix))))
    return denied('GAME_IDENTIFIERS_NOT_MATCHED');
  if(!['active','open'].includes(market?.status))return denied('MARKET_NOT_OPEN');
  const line=number(market.floorStrike),score=home+away;
@@ -92,11 +92,11 @@ export function verifyExceededTotal({game,market,now=Date.now()}={}){
  const home=number(game.homeScore),away=number(game.awayScore),line=number(market?.floorStrike);
  if(!finite(home)||!finite(away)||home<0||away<0||!finite(line)||line<=0||
     home+away<=line)return no('NO_VERIFIED_CROSSED_THRESHOLD');
- const type={NFL:'KXNFLTOTAL',NBA:'KXNBATOTAL',NHL:'KXNHLTOTAL',MLB:'KXMLBTOTAL',CFB:'KXCFBTOTAL',CBB:'KXCBBTOTAL',EPL:'KXEPLTOTAL',MLS:'KXMLSTOTAL',WNBA:'KXWNBATOTAL'}[game.sport],
+ const types={NFL:['KXNFLTOTAL'],NBA:['KXNBATOTAL'],NHL:['KXNHLTOTAL'],MLB:['KXMLBTOTAL'],CFB:['KXCFBTOTAL'],CBB:['KXCBBTOTAL','KXNCAAMBTOTAL'],EPL:['KXEPLTOTAL'],MLS:['KXMLSTOTAL'],WNBA:['KXWNBATOTAL']}[game.sport],
    day=codeFor(game.date),a=String(game.awayAbbreviation||'').toUpperCase(),
    h=String(game.homeAbbreviation||'').toUpperCase(),ticker=String(market?.ticker||'');
- if(!type||!day||!a||!h||a===h||!['active','open'].includes(market.status)||
-    ![type+'-'+day+a+h+'-',type+'-'+day+h+a+'-'].some(prefix=>ticker.startsWith(prefix)))
+ if(!types||!day||!a||!h||a===h||!['active','open'].includes(market.status)||
+    !types.some(type=>[type+'-'+day+a+h+'-',type+'-'+day+h+a+'-'].some(prefix=>ticker.startsWith(prefix))))
    return no('UNMATCHED_OR_CLOSED_CONTRACT');
  const rules=String(market.rulesPrimary||'');
  if(!/(collectively score more than|score more goals than|score more runs than|combined score.*more than)/i.test(rules)||!rules.includes(String(line))||
