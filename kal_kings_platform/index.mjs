@@ -547,7 +547,9 @@ async function getManualOrders(){
    filled_count::text AS filled_count,limit_price::text AS limit_price,
    max_debit::text AS max_debit,last_error,created_at,updated_at
    FROM kal_kings_manual_intents
-   WHERE status<>'PREVIEW' ORDER BY created_at DESC LIMIT 12`);
+   WHERE status='FILLED'
+     AND filled_count::numeric>=contracts::numeric
+   ORDER BY updated_at DESC LIMIT 12`);
  return rows.map(r=>({id:r.id,ticker:r.ticker,side:r.side,
    contracts:Number(r.contracts),status:r.status,filled:Number(r.filled_count),
    price:Number(r.limit_price),maxDebit:Number(r.max_debit),
