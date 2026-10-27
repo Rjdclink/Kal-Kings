@@ -129,7 +129,13 @@ function renderAutoOrders(){
  const watches=solo.monitoredExits||[];
  $('#soloMonitored').textContent=watches.filter(x=>x.status==='WATCHING').length+' watched';
  $('#soloHedged').textContent=String(summarySolo.fullyHedgedTrades??0);
- $('#soloStatus').textContent='Independent Kalshi entry and exit · '+(solo.scheduler||'Scheduled monitor')+'.';
+ const scan=data.scannerStatus||{},scanDetails=scan.details||{};
+ const sports=Number(scanDetails.sportsSignals)||0,ideas=Number(scanDetails.ideaCount)||0;
+ const checks=Number(scanDetails.executionCandidateChecks)||0,attempts=Number(scanDetails.orderSubmissionAttempts)||0;
+ const blocker=scanDetails.directionalReason||scan.reason||'Waiting for next scan';
+ $('#soloStatus').textContent=sports>0?
+   'Sports-first automation · '+sports+' live signals · '+ideas+' candidates · '+checks+' execution checks · '+attempts+' order submissions · '+String(blocker).replaceAll('_',' '):
+   'Independent Kalshi entry/exit · '+(solo.scheduler||'Scheduled monitor')+' · '+String(blocker).replaceAll('_',' ');
  $('#soloPositions').innerHTML=watches.length?watches.slice(0,6).map(x=>`<div class="ledgerline"><strong>${esc(x.ticker)}</strong><span>${esc(x.status)}</span></div>`).join(''):(solo.orders||[]).length?(solo.orders||[]).slice(0,6).map(x=>`<div class="ledgerline"><strong>${esc(x.ticker)}</strong><span>${esc(x.status)}</span></div>`).join(''):'<div class="tiny">No currently monitored exchange positions.</div>';
 }
 function renderCrawlerSources(){
