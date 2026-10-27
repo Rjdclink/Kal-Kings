@@ -423,7 +423,8 @@ async function collectPredictiveStrategies(){
      FROM jsonb_to_recordset($1::jsonb) AS p(asset text,strategy text,direction text,status text,
        source_count integer,market_ticker text,details jsonb)`,[JSON.stringify(rows)]);
  }
- const totalIdeas=sports.flatMap(x=>{
+ const totalProofDiagnostics={checked:0,eligible:0,rejected:{}};
+  const totalIdeas=sports.flatMap(x=>{
    const markets=x.exceededTotalsMarkets?.length?x.exceededTotalsMarkets:
      (x.totalMarket?[x.totalMarket]:[]);
    if(!x.totalGame)return [];
@@ -461,7 +462,7 @@ async function collectPredictiveStrategies(){
  // Reserve independent priority slots for both live sports strategies and
  // crypto: one busy sports event cannot starve the crypto automation queue.
  const ideas=[...totalIdeas.slice(0,8),...rankedLate.slice(0,6),...cryptoIdeas.slice(0,6)];
- return {cryptoSignals:cryptos.length,sportsSignals:sports.length,stored:rows.length,ideas,universeScanned:universeResponse.status==='fulfilled'?universeResponse.value.scanned:0};
+ return {cryptoSignals:cryptos.length,sportsSignals:sports.length,stored:rows.length,ideas,totalProofDiagnostics,priorityOrder:['TOTAL_ALREADY_OVER','LATE_GAME_LEAD','CRYPTO_DIRECTIONAL_CONSENSUS'],universeScanned:universeResponse.status==='fulfilled'?universeResponse.value.scanned:0};
 }
 async function getPredictiveStrategies(){
  const rows=await sql(`SELECT DISTINCT ON (asset,strategy) asset,strategy,direction,status,
@@ -531,7 +532,9 @@ async function getManualOrders(){
 async function recordScannerStatus(result){
  const details={cryptoSignals:result.cryptoSignals||0,sportsSignals:result.sportsSignals||0,
    universeScanned:result.universeScanned||0,ideaCount:result.ideaCount||0,
-   directionalReason:result.directionalReason||null,ticker:result.ticker||null};
+   directionalReason:result.directionalReason||null,ticker:result.ticker||null,
+   totalProofDiagnostics:result.totalProofDiagnostics||null,
+   priorityOrder:result.priorityOrder||['TOTAL_ALREADY_OVER','LATE_GAME_LEAD','CRYPTO_DIRECTIONAL_CONSENSUS']};
  await sql(`INSERT INTO kal_kings_scanner_status
    (id,last_status,last_reason,details,updated_at)
    VALUES('main',$1,$2,$3::jsonb,now())
