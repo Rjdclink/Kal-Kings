@@ -427,7 +427,23 @@ export async function fetchSportsSignals({fetcher=fetch,now=Date.now(),sports=['
      const totalProjection=assessTotalsProjection({...signal.gameContext,
        totalLine:totalsMarket?.floorStrike??oddsLine,
        weather:signal.weather,injuries:signal.injuries,now});
-     return {...signal,externalWinProbability:prediction,sourceVerified:probability.sourceVerified,
+     // The verified ESPN live scoreboard is the entry signal; do not
+     // accidentally gate execution on an optional play-level win-probability
+     // feed. A late lead is queued only when the correct active Kalshi outcome
+     // is independently matched. The runner still rechecks price, depth, fees,
+     // exposure, bankroll, and the exchange's actual order response.
+     const scoreVerified=Boolean(event?.id&&signal.gameContext&&
+       signal.gameContext.state==='in'&&signal.gameContext.updatedAt&&
+       Number.isFinite(Date.parse(signal.gameContext.updatedAt)));
+     const lateGameReady=Boolean(scoreVerified&&signal.lateGame?.eligibleForAutomation&&market);
+     const lateGame={...signal.lateGame,
+       eligibleForAutomation:lateGameReady,
+       action:lateGameReady?'EXECUTION_CANDIDATE':'REVIEW_ONLY',
+       reason:signal.lateGame?.eligibleForAutomation?
+         (market?'COMMANDING_LATE_LEAD':'NO_MATCHING_ACTIVE_KALSHI_CONTRACT'):
+         signal.lateGame?.reason};
+     return {...signal,lateGame,externalWinProbability:prediction,
+       sourceVerified:scoreVerified,
        marketMatchVerified:Boolean(market),market:market||null,
        independentModelSource:probability.sourceVerified?'ESPN_LIVE_MODEL':null,
        modelPlayId:probability.modelPlayId||null,
