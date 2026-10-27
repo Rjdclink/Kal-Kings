@@ -62,7 +62,6 @@ function renderStatus(){
  $('#kLastPayout').textContent=money(b.latestSettlementPayoutDollars);
  $('#kRiskAllocation').textContent=riskText(d.riskPolicy);
  $('#riskBudget').textContent=riskText(d.riskPolicy);
- $('#opCount').textContent=String(d.kalshiSolo?.opportunities?.length||0)+' eligible';
  $('#aiShift').textContent=d.agent?String(d.agent.slot+1)+'/4':'—';
  $('#aiRole').textContent=d.agent?d.agent.name+': '+d.agent.role:'Local analysis unavailable';
  $('#liveDot').classList.remove('off');$('#liveLabel').textContent='Dashboard online';
