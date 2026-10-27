@@ -73,8 +73,8 @@ const shortDate=date=>{
   ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][d.getUTCMonth()]+
   String(d.getUTCFullYear()%100).padStart(2,'0');
 };
-const TEAM_TICKER_ALIASES={NBA:{BKN:['BRK'],NYK:['NY'],GSW:['GS'],NOP:['NO'],SAS:['SA'],UTA:['UTAH'],PHX:['PHO']},NHL:{LAK:['LA'],SJS:['SJ'],TBL:['TB'],NJD:['NJ'],VGK:['VEG']},MLB:{CWS:['CHW'],KCR:['KC'],SDP:['SD'],SFG:['SF'],TBR:['TB'],WSN:['WSH'],ATH:['OAK']},NFL:{WSH:['WAS'],JAC:['JAX'],LAR:['LA'],LAC:['SD'],LV:['OAK']},CFB:{},CBB:{},WNBA:{},EPL:{},MLS:{}};
-const teamAliases=(sport,team)=>[...new Set([String(team||'').toUpperCase(),...(TEAM_TICKER_ALIASES[sport]?.[String(team||'').toUpperCase()]||[])])];
+const MATCH_TEAM_TICKER_ALIASES={NBA:{BKN:['BRK'],NYK:['NY'],GSW:['GS'],NOP:['NO'],SAS:['SA'],UTA:['UTAH'],PHX:['PHO']},NHL:{LAK:['LA'],SJS:['SJ'],TBL:['TB'],NJD:['NJ'],VGK:['VEG']},MLB:{CWS:['CHW'],KCR:['KC'],SDP:['SD'],SFG:['SF'],TBR:['TB'],WSN:['WSH'],ATH:['OAK']},NFL:{WSH:['WAS'],JAC:['JAX'],LAR:['LA'],LAC:['SD'],LV:['OAK']},CFB:{},CBB:{},WNBA:{},EPL:{},MLS:{}};
+const teamAliases=(sport,team)=>[...new Set([String(team||'').toUpperCase(),...(MATCH_TEAM_TICKER_ALIASES[sport]?.[String(team||'').toUpperCase()]||[])])];
 export function matchSportsOutcome(event,market){
  const denied={matched:false,reason:'UNVERIFIED_EVENT_IDENTITY'};
  const prefixes={NFL:['KXNFLGAME'],NBA:['KXNBAGAME'],NHL:['KXNHLGAME'],MLB:['KXMLBGAME'],CFB:['KXCFBGAME'],CBB:['KXCBBGAME','KXNCAAMBGAME'],WNBA:['KXWNBAGAME'],EPL:['KXEPLGAME'],MLS:['KXMLSGAME']};
@@ -82,7 +82,7 @@ export function matchSportsOutcome(event,market){
  const home=String(event?.homeAbbreviation||'').toUpperCase(),away=String(event?.awayAbbreviation||'').toUpperCase(),selected=String(event?.selectedAbbreviation||'').toUpperCase();
  if(!prefixesForSport.length||!date||!home||!away||home===away||![home,away].includes(selected)||!/^[A-Z]{2,4}$/.test(home)||!/^[A-Z]{2,4}$/.test(away))return denied;
  const ticker=String(market?.ticker||market?.id||'').toUpperCase();
- const homes=teamAliases(sport,home),aways=teamAliases(sport,away),selecteds=teamAliases(sport,selected);
+ const homes=matchTeamAliases(sport,home),aways=matchTeamAliases(sport,away),selecteds=matchTeamAliases(sport,selected);
  for(const prefix of prefixesForSport)for(const a of aways)for(const h of homes)for(const outcome of selecteds){
   if([prefix+'-'+date+a+h+'-'+outcome,prefix+'-'+date+h+a+'-'+outcome].includes(ticker))return {matched:true,reason:'EXACT_DATE_TEAMS_AND_OUTCOME',ticker,eventKey:prefix+'-'+date+a+h};
   if(sport==='MLB'&&new RegExp('^'+prefix+'-'+date+'\\d{4}(?:'+a+h+'|'+h+a+')-'+outcome+'$').test(ticker))return {matched:true,reason:'EXACT_DATE_TEAMS_AND_OUTCOME',ticker,eventKey:prefix+'-'+date+a+h};
