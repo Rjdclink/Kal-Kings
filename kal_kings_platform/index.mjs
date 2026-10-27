@@ -31,6 +31,7 @@ import {verifyExceededTotal} from './total_strategy.mjs';
 import {makeUniverseScanner} from './universe_service.mjs';
 import {recordForecasts,resolveForecasts,getStrategyPerformance,getDirectionalOrders} from './strategy_history.mjs';
 import {planOneTimeMicroOrder,interpretMicroReceipt} from './live_trade_test.mjs';
+import {normalizeKalshiOrderV2} from './kalshi_order_v2.mjs';
 
 const HTML=readFileSync(new URL('./dashboard.html',import.meta.url),'utf8');
 const KALSHI='https://api.elections.kalshi.com';
@@ -318,7 +319,7 @@ async function submitSoloOrder(order){
  const path='/trade-api/v2/portfolio/events/orders';
  const res=await fetch(KALSHI+path,{method:'POST',
   headers:{...kalshiHeaders(path,'POST'),'content-type':'application/json'},
-  body:JSON.stringify(order),redirect:'error',signal:AbortSignal.timeout(9000)});
+  body:JSON.stringify(normalizeKalshiOrderV2(order)),redirect:'error',signal:AbortSignal.timeout(9000)});
  if(!res.ok){
    const problem=new Error('Kalshi refused the order');
    problem.httpStatus=res.status;
