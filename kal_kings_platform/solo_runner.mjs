@@ -89,6 +89,24 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
       const ideas=Array.isArray(predictive?.ideas)?predictive.ideas:[];
       // Only verified sports candidates are permitted into the order runner.
       const sportsIdeas=ideas.filter(x=>['TOTAL_ALREADY_OVER','LATE_GAME_LEAD'].includes(x?.strategy));
+      if(sportsIdeas.length){
+        stage='SPORTS_EXECUTION';
+        const sport=await executeDirectional({ideas:sportsIdeas,account:{status:'VERIFIED',balance,
+          holdings:account?.holdings,positionsComplete:account?.positionsComplete}});
+        scanMeta.directionalReason=sport?.reason||sport?.status||'SPORTS_NOT_APPROVED';
+        scanMeta.sportsExecutionStatus=sport?.status||'UNAVAILABLE';
+        scanMeta.sportsExecutionReason=sport?.reason||null;
+        scanMeta.executionCandidateChecks+=Number(sport?.candidateChecks)||0;
+        scanMeta.orderSubmissionAttempts+=Number(sport?.orderSubmissionAttempts)||0;
+        scanMeta.lastCheckedTicker=sport?.lastCheckedTicker||scanMeta.lastCheckedTicker;
+        scanMeta.lastCheckedStrategy=sport?.lastCheckedStrategy||scanMeta.lastCheckedStrategy;
+        if(['FILLED','PARTIALLY_FILLED','UNCERTAIN'].includes(sport?.status))
+          return finish({status:'SPORTS_'+sport.status,ticker:sport.ticker});
+        if(sport?.status==='REJECTED')
+          return finish({status:'SPORTS_REJECTED',reason:sport.reason,ticker:sport.ticker});
+        if(sport?.status==='HALTED_PENDING_RECONCILIATION')
+          return finish({status:'HALTED_DIRECTIONAL_RECONCILIATION'});
+      }
       if(!sportsIdeas.length&&!scanMeta.directionalReason)scanMeta.directionalReason='NO_VERIFIED_MATCHED_SPORTS_CANDIDATE';
       if(scanMeta.sportsSignals>0){
         const status=scanMeta.orderSubmissionAttempts>0?'SPORTS_EXECUTION_ATTEMPTED_NO_FILL':
