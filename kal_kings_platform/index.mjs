@@ -224,7 +224,8 @@ async function freshKalshiMarket(ticker){
      noBidDepth:Number(m.no_bid_size_fp??m.no_bid_size??0),
     yesBidDepth:Number(m.yes_bid_size_fp??m.yes_bid_size??0),
     yesDepth:Number(m.yes_ask_size_fp??m.yes_ask_size??0),
-    noDepth:Number(m.no_ask_size_fp??m.no_ask_size??0),observedAt:iso()};
+    noDepth:Number(m.no_ask_size_fp??m.no_ask_size??0),
+    expectedExpirationTime:m.expected_expiration_time||null,observedAt:iso()};
 }
 // Independent quantitative screening, backed by actual exchange order-book depth.
 // Historical snapshots are observations, never claims of executed trades.
