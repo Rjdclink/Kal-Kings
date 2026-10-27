@@ -67,11 +67,15 @@ export async function spotMomentum(fetcher,symbol,now){
 const SPORTS_MARKET_SERIES={NFL:'KXNFLGAME',NBA:'KXNBAGAME',NHL:'KXNHLGAME',MLB:'KXMLBGAME',CFB:'KXCFBGAME',CBB:['KXCBBGAME','KXNCAAMBGAME'],EPL:'KXEPLGAME',MLS:'KXMLSGAME',WNBA:'KXWNBAGAME'};
 const SPORTS_TOTAL_SERIES={NFL:'KXNFLTOTAL',NBA:'KXNBATOTAL',NHL:'KXNHLTOTAL',MLB:'KXMLBTOTAL',CFB:'KXCFBTOTAL',CBB:['KXCBBTOTAL','KXNCAAMBTOTAL'],EPL:'KXEPLTOTAL',MLS:'KXMLSTOTAL',WNBA:'KXWNBATOTAL'};
 function matchesSportsTicker(sport,series,dateCode,away,home,ticker){
- const t=String(ticker||'');
- if(sport==='MLB')return new RegExp('^'+series+'-'+dateCode+'\\d{4}(?:'+away+home+'|'+home+away+')-').test(t);
- return t.startsWith(series+'-'+dateCode+away+home+'-')||
-   t.startsWith(series+'-'+dateCode+home+away+'-');
+ const t=String(ticker||'').toUpperCase(),aways=teamAliases(sport,away),homes=teamAliases(sport,home);
+ for(const a of aways)for(const h of homes){
+  if(sport==='MLB'){if(new RegExp('^'+series+'-'+dateCode+'\\d{4}(?:'+a+h+'|'+h+a+')-').test(t))return true;}
+  else if(t.startsWith(series+'-'+dateCode+a+h+'-')||t.startsWith(series+'-'+dateCode+h+a+'-'))return true;
+ }
+ return false;
 }
+const TEAM_TICKER_ALIASES={NBA:{BKN:['BRK'],NYK:['NY'],GSW:['GS'],NOP:['NO'],SAS:['SA'],UTA:['UTAH'],PHX:['PHO']},NHL:{LAK:['LA'],SJS:['SJ'],TBL:['TB'],NJD:['NJ'],VGK:['VEG']},MLB:{CWS:['CHW'],KCR:['KC'],SDP:['SD'],SFG:['SF'],TBR:['TB'],WSN:['WSH'],ATH:['OAK']},NFL:{WSH:['WAS'],JAC:['JAX'],LAR:['LA'],LAC:['SD'],LV:['OAK']},CFB:{},CBB:{},WNBA:{},EPL:{},MLS:{}};
+const teamAliases=(sport,team)=>[...new Set([String(team||'').toUpperCase(),...(TEAM_TICKER_ALIASES[sport]?.[String(team||'').toUpperCase()]||[])])];
 const safe=val=>{if(val===null||val===undefined||val==='')return null;const n=Number(val);return Number.isFinite(n)?n:null;};
 // Kalshi's legacy quote fields are integer cents; *_dollars fields are dollars.
 const kalshiPrice=(dollars,cents)=>{
