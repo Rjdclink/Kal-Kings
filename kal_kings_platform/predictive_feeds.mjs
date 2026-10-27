@@ -204,7 +204,7 @@ export function calculateCryptoWindowReference(spot,closeTime){
  return {referencePrice:median(opens),spotPrice:median(current),
   sourceCount:opens.length,source:'SPOT_OPEN_PROXY_NOT_CF_BENCHMARKS'};
 }
-export async function fetchCryptoSignals({fetcher=fetch,now=Date.now(),symbols=['BTC','ETH','SOL','XRP','DOGE','ADA'],runSimulation=true}={}){
+export async function fetchCryptoSignals({fetcher=fetch,now=Date.now(),symbols=['ETH','SOL','XRP','DOGE','ADA'],runSimulation=true}={}){
  const all=await Promise.all(symbols.filter(x=>candidates[x]).map(async symbol=>{
    const [s,m]=await Promise.allSettled([
     spotMomentum(fetcher,symbol,now),
