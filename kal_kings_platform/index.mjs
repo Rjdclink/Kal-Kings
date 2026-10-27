@@ -399,7 +399,6 @@ async function collectPredictiveStrategies(){
   ...sports.flatMap(x=>[
    ...(x.exceededTotalsMarkets?.slice(0,4)||[]).map(m=>({asset:x.event,strategy:'TOTAL_ALREADY_OVER',direction:'OVER',status:'SCORE_EXCEEDS_CONTRACT',source_count:1,market_ticker:m.ticker,details:{...x,totalMarket:m}})),
    ...(x.lateGame?.direction?[{asset:x.event,strategy:'LATE_GAME_LEAD',direction:x.lateGame.direction,status:x.lateGame.reason,source_count:1,market_ticker:x.market?.ticker||null,details:x}]:[]),
-   ...(x.totals?.direction?[{asset:x.event,strategy:'OVER_UNDER_CONTEXT',direction:x.totals.direction,status:x.totals.reason,source_count:1,market_ticker:null,details:x}]:[])
   ])
  ];
  if(rows.length)await sql('INSERT INTO kal_kings_predictive_signals(asset,strategy,direction,status,source_count,market_ticker,details,observed_at) SELECT p.asset,p.strategy,p.direction,p.status,p.source_count,p.market_ticker,p.details,now() FROM jsonb_to_recordset($1::jsonb) AS p(asset text,strategy text,direction text,status text,source_count integer,market_ticker text,details jsonb)',[JSON.stringify(rows)]);
@@ -426,7 +425,7 @@ async function getPredictiveStrategies(){
      SELECT DISTINCT ON (asset,strategy) asset,strategy,direction,status,source_count,
        market_ticker,details,observed_at
      FROM kal_kings_predictive_signals
-     WHERE strategy IN ('LIVE_SPORTS_SCORE','LATE_GAME_LEAD','TOTAL_ALREADY_OVER','OVER_UNDER_CONTEXT')
+     WHERE strategy IN ('LATE_GAME_LEAD','TOTAL_ALREADY_OVER')
        AND observed_at>now()-interval '120 seconds'
      ORDER BY asset,strategy,observed_at DESC
    ) latest ORDER BY observed_at DESC LIMIT 100`);
