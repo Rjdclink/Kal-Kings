@@ -60,8 +60,7 @@ export function makeSoloRunner({fetchAccount,fetchQuotes,fetchMarket,sql,submit,
         WHERE o.status IN ('UNHEDGED','UNCERTAIN','PARTIALLY_FILLED','YES_FILLED','SUBMITTING')
           AND (w.status IS NULL OR w.status<>'CLOSED') LIMIT 1`);
       if(exposures.length)return finish({status:'HALTED_PENDING_RECONCILIATION'});
-      // Independent directional, late-game and totals watchlist runs even when
-      // the existing paired YES/NO engine has no viable opportunity.
+      // Run the sports-only signal scan after account and exposure reconciliation.
       let predictive={ideas:[]};
       try{predictive=await scanPredictive()}catch{/* Never let an advisory feed cause blind orders or stop cash reconciliation. */}
       scanMeta={...scanMeta,sportsSignals:Number(predictive?.sportsSignals)||0,universeScanned:Number(predictive?.universeScanned)||0,
