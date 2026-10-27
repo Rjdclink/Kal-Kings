@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {eligibleForecast,recordForecasts,resolveForecasts,getStrategyPerformance} from './strategy_history.mjs';
+import {eligibleForecast,recordForecasts,resolveForecasts,getStrategyPerformance,getDirectionalOrders} from './strategy_history.mjs';
 const data={id:'game',sourceVerified:true,marketMatchVerified:true,modelPlayId:'ESPN-1',
  market:{ticker:'KXNFLGAME-26OCT26DALPHI-PHI',yesAsk:.75},externalWinProbability:.9,eventKey:'NFL:DALPHI'};
 test('verified live-game forecast is recorded once with actual market ask',async()=>{
@@ -19,4 +19,16 @@ test('performance never invents a win rate before confirmed settlements',async()
  const sql=async(q)=>q.includes('GROUP BY status')?[]:[];
  const r=await getStrategyPerformance(sql);
  assert.equal(r.status,'INSUFFICIENT_RESOLVED_SAMPLE');assert.equal(r.recordedSettlements,0);
+});
+
+test('directional ledger only returns confirmed open fills',async()=>{
+ let query='';
+ const rows=await getDirectionalOrders(async q=>{query=q;return [
+  {ticker:'FILLED',status:'FILLED',contracts:'2',filled_count:'2',entry_price:'.7',modeled_probability:'.9'},
+  {ticker:'PARTIAL',status:'PARTIALLY_FILLED',contracts:'3',filled_count:'1',entry_price:'.6',modeled_probability:'.8'}
+ ]});
+ assert.match(query,/status IN \('FILLED','PARTIALLY_FILLED'\)/);
+ assert.match(query,/filled_count::numeric>0/);
+ assert.equal(rows.length,2);
+ assert.equal(rows[1].filled,1);
 });
