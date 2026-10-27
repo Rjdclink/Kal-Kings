@@ -405,6 +405,12 @@ async function collectPredictiveStrategies(){
    ...cryptos.map(x=>({asset:x.symbol,strategy:'CRYPTO_DIRECTIONAL_CONSENSUS',
      direction:x.direction==='UNKNOWN'?null:x.direction,status:x.status||'DATA_UNAVAILABLE',
      source_count:x.sources||0,market_ticker:x.marketTicker||null,details:x})),
+   ...sports.map(x=>({asset:x.event,strategy:'LIVE_SPORTS_SCORE',
+     direction:null,status:x.lateGame?.reason||x.totals?.reason||'LIVE_SCORE_VERIFIED',
+     source_count:1,market_ticker:null,
+     details:{event:x.event,sport:x.sport,score:x.score,period:x.period,
+       clockSeconds:x.clockSeconds,gameContext:x.gameContext,totalGame:x.totalGame,
+       lateGame:x.lateGame,updatedAt:x.updatedAt}})),
    ...sports.flatMap(x=>[
      ...(x.exceededTotalsMarkets?.slice(0,4)||[]).map(m=>({asset:x.event,
         strategy:'TOTAL_ALREADY_OVER',direction:'OVER',status:'SCORE_EXCEEDS_CONTRACT',
@@ -470,7 +476,7 @@ async function getPredictiveStrategies(){
    source_count,market_ticker,details::text AS details,observed_at
    FROM kal_kings_predictive_signals
     WHERE asset <> 'BTC' AND ((strategy='CRYPTO_DIRECTIONAL_CONSENSUS' AND observed_at>now()-interval '90 seconds')
-       OR (strategy IN ('LATE_GAME_LEAD','TOTAL_ALREADY_OVER','OVER_UNDER_CONTEXT')
+       OR (strategy IN ('LIVE_SPORTS_SCORE','LATE_GAME_LEAD','TOTAL_ALREADY_OVER','OVER_UNDER_CONTEXT')
            AND observed_at>now()-interval '25 seconds'))
     ORDER BY asset,strategy,observed_at DESC LIMIT 40`);
  return rows.map(r=>({asset:r.asset,strategy:r.strategy,direction:r.direction,
