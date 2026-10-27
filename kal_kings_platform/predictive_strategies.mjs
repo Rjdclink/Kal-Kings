@@ -109,7 +109,7 @@ export function assessLateGame({sport,home,away,homeScore,awayScore,period,clock
  const code=String(sport||'').toUpperCase();
  const rules={NFL:{periods:[4],maxClock:600,minLead:14},CFB:{periods:[4],maxClock:600,minLead:14},
    NBA:{periods:[4],maxClock:360,minLead:12},WNBA:{periods:[4],maxClock:300,minLead:10},
-   CBB:{periods:[2],maxClock:360,minLead:12},NHL:{periods:[3],maxClock:480,minLead:2},
+   CBB:{periods:[2],maxClock:360,minLead:12},NHL:{periods:[3],maxClock:600,minLead:2},
    EPL:{periods:[2],maxClock:900,minLead:2},MLS:{periods:[2],maxClock:900,minLead:2},
    MLB:{periods:[8,9,10,11,12,13,14,15],maxClock:0,minLead:3}};
  const rule=rules[code],periodOk=rule&&(code==='MLB'?period>=8:rule.periods.includes(period));
