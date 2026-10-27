@@ -57,7 +57,9 @@ export async function getDirectionalOrders(sql){
  const rows=await sql(`SELECT ticker,strategy,side,status,contracts::text AS contracts,
    filled_count::text AS filled_count,entry_price::text AS entry_price,
    modeled_probability::text AS modeled_probability,created_at,updated_at
-   FROM kal_kings_directional_orders ORDER BY created_at DESC LIMIT 15`);
+   FROM kal_kings_directional_orders
+   WHERE status IN ('FILLED','PARTIALLY_FILLED') AND filled_count::numeric>0
+   ORDER BY created_at DESC LIMIT 15`);
  return rows.map(x=>({...x,contracts:Number(x.contracts),
    filled:Number(x.filled_count),price:Number(x.entry_price),
    modeledProbability:Number(x.modeled_probability)}));
