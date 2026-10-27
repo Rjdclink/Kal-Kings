@@ -164,12 +164,16 @@ function renderPredictive(){
    const price=crypto?(side==='yes'?signal.yesAsk:signal.noAsk):
       (signal.totalMarket?.yesAsk||signal.market?.yesAsk);
    const canReview=Boolean(ticker&&side&&Number(price)>0&&Number(price)<1);
-   const scanDetails=(data.scannerStatus||{}).details||{};
-   const wasExecutionChecked=Boolean(!crypto&&ticker&&scanDetails.lastCheckedTicker===ticker);
+   const scan=data.scannerStatus||{},scanDetails=scan.details||{};
+   const recentScan=Boolean(scan.updatedAt&&Date.now()-Date.parse(scan.updatedAt)<120000);
+   const wasExecutionChecked=Boolean(!crypto&&recentScan&&
+     (scanDetails.sportsSignals>0||(ticker&&scanDetails.lastCheckedTicker===ticker)));
    const executionLabel=wasExecutionChecked?
-     'Auto execution checked · '+String(scanDetails.directionalReason||'Awaiting result').replaceAll('_',' '):
+     (ticker&&scanDetails.lastCheckedTicker===ticker?
+       'Auto execution checked · '+String(scanDetails.directionalReason||scan.reason||'Awaiting result').replaceAll('_',' '):
+       'Sports scan checked · '+String(scan.reason||scanDetails.directionalReason||'No execution-qualified contract').replaceAll('_',' ')):
      (['LATE_GAME_LEAD','TOTAL_ALREADY_OVER'].includes(r.strategy)?
-       'Auto scan · waiting for an executable matched contract':'Live score monitoring');
+       'Auto scan · waiting for an executable matched contract':'Live score feed · awaiting execution-qualified signal');
    const descriptor=crypto?((signal.agreeingSources||0)+'/7 votes agree · '+(ticker||'No current Kalshi quote')):
       (r.strategy==='LATE_GAME_LEAD'?'Commanding late-game lead'+(scoreLabel?' · '+scoreLabel:'')+' · '+(ticker||'Awaiting contract'):
        r.strategy==='TOTAL_ALREADY_OVER'?'Verified total threshold exceeded'+(scoreLabel?' · '+scoreLabel:'')+' · '+(ticker||'Awaiting contract'):
@@ -179,7 +183,7 @@ function renderPredictive(){
       <div class="tiny">${esc(descriptor)}</div>
       <div class="tiny">${time(r.updatedAt)} · ${crypto?'Independent momentum research':executionLabel}</div>
       ${card}</div><div class="number">${esc(direction)}
-       <div class="tiny">${canReview?'Manual option':'Monitoring'}</div></div></div>`;
+       <div class="tiny">${canReview?'Manual option':wasExecutionChecked?'Checked · no executable contract':'Awaiting eligible signal'}</div></div></div>`;
  }).join(''):'<div class="empty"><strong>Waiting for market signals</strong><p>Research feeds update as current prices become available.</p></div>';
 }
 let pendingManualIntent=null;
