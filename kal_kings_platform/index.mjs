@@ -463,13 +463,14 @@ async function collectPredictiveStrategies(){
    });
  }).sort((a,b)=>b.possibleSettlementMargin-a.possibleSettlementMargin||
     Date.parse(a.market.closeTime)-Date.parse(b.market.closeTime));
- const rankedLate=sports.filter(x=>x.lateGame?.reason==='COMMANDING_LATE_LEAD'&&
-    x.marketMatchVerified===true&&x.market&&x.gameContext&&x.totalGame)
+ const rankedLate=sports.filter(x=>x.lateGame?.eligibleForAutomation===true&&x.lateGame?.reason==='COMMANDING_LATE_LEAD'&&x.gameContext&&x.totalGame)
    .map(x=>{
      const game=x.gameContext,tier=sportsLeadTier({sport:game.sport,period:game.period,
        clockSeconds:game.clockSeconds,lead:x.lateGame.lead});
-     return {...x,strategy:'LATE_GAME_LEAD',game,sourceVerified:true,
-       lateGameVerified:true,maxAllocationFraction:tier.maxAllocationFraction,
+     const matched=x.marketMatchVerified===true&&!!x.market?.ticker;
+     return {...x,strategy:'LATE_GAME_LEAD',game,
+       sourceVerified:true,lateGameVerified:true,marketMatchVerified:matched,
+       market:matched?x.market:null,maxAllocationFraction:tier.maxAllocationFraction,
        allowed:tier.eligible};
    }).filter(x=>x.allowed)
    .sort((a,b)=>b.maxAllocationFraction-a.maxAllocationFraction||
