@@ -133,7 +133,7 @@ function renderCrawlerSources(){
  $('#crawlerSources').innerHTML=rows.length?rows.map(x=>`<div class="status-line"><span>${esc(x.name)}</span><span class="${x.configured?'success':'muted'}">${x.configured?(x.successes+' successful'):'Requires setup'}</span></div>`).join(''):'<div class="tiny">Research adapters are not ready.</div>';
 }
 function renderPredictive(){
- const rows=data.predictiveStrategies||[];
+ const rows=(data.predictiveStrategies||[]).filter(r=>!(r.strategy==='CRYPTO_DIRECTIONAL_CONSENSUS'&&String(r.asset||'').toUpperCase()==='BTC'));
  const target=$('#predictiveCards');
  target.innerHTML=rows.length?rows.slice(0,18).map(r=>{
    const signal=r.details||{},crypto=r.strategy==='CRYPTO_DIRECTIONAL_CONSENSUS';
